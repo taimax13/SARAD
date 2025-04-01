@@ -5,6 +5,17 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, UpSampling2D
 from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt
+import tensorflow as tf
+
+# MSE (Mean Squared Error) is simple and pixel-wise — but it treats all pixels equally, even if they’re just small noise or unimportant background.
+# and
+# SSIM (Structural Similarity Index)
+
+
+def hybrid_loss(y_true, y_pred):
+    mse = tf.reduce_mean(tf.square(y_true - y_pred))
+    ssim = 1 - tf.reduce_mean(tf.image.ssim(y_true, y_pred, max_val=1.0))
+    return 0.5 * mse + 0.5 * ssim
 
 
 class SARAutoencoderTrainer:
@@ -38,7 +49,7 @@ class SARAutoencoderTrainer:
             UpSampling2D((2, 2)),
             Conv2D(1, (3, 3), activation='sigmoid', padding='same')
         ])
-        self.model.compile(optimizer=Adam(1e-3), loss='mse')
+        self.model.compile(optimizer=Adam(1e-3), loss=hybrid_loss)
         print("✅ Autoencoder model compiled.")
 
     def train(self, epochs=20, batch_size=16):
