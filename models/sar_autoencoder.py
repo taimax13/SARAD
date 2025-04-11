@@ -4,7 +4,9 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, UpSampling2D
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
 import matplotlib.pyplot as plt
+import pandas as pd
 
 class SARAutoencoderTrainer:
     def __init__(self, patch_dir: str, save_path: str = "models/sar_autoencoder.h5"):
@@ -23,8 +25,13 @@ class SARAutoencoderTrainer:
         if not files:
             raise ValueError(f"No patch files found in {self.patch_dir}")
 
-        patches = [np.load(f) for f in files]
-        patches = np.array(patches).astype(np.float32) / 255.0
+        # Normalize SAR patches from dB scale to [0, 1]
+        def normalize_sar(img, min_db=-30, max_db=0):
+            img = np.clip(img, min_db, max_db)
+            return (img - min_db) / (max_db - min_db)
+
+        patches = [normalize_sar(np.load(f)) for f in files]
+        patches = np.array(patches).astype(np.float32)
 
         # Auto reshape: (N, H, W) → (N, H, W, 1)
         if patches.ndim == 3:
@@ -58,17 +65,20 @@ class SARAutoencoderTrainer:
         self.model.compile(optimizer=Adam(1e-3), loss='mse')
         print("✅ Autoencoder model compiled.")
 
-    def train(self, epochs=20, batch_size=16):
+    def train(self, epochs=100, batch_size=16):
         if self.model is None:
             raise ValueError("Model not built yet. Call build_model() first.")
         if self.X_train is None:
             raise ValueError("Data not loaded. Call load_data() first.")
 
+        early_stop = EarlyStopping(patience=10, restore_best_weights=True)
+
         history = self.model.fit(
             self.X_train, self.X_train,
             validation_data=(self.X_val, self.X_val),
             epochs=epochs,
-            batch_size=batch_size
+            batch_size=batch_size,
+            callbacks=[early_stop]
         )
         self.plot_history(history)
 
@@ -131,6 +141,45 @@ class SARAutoencoderTrainer:
             plt.tight_layout()
             plt.show()
 
+    def evaluate_validation_set(self):
+        if self.X_val is None:
+            raise ValueError("Validation data not loaded.")
+
+        print("📊 Evaluating reconstructions...")
+        preds = self.model.predict(self.X_val)
+        stats = []
+
+        for idx in range(len(self.X_val)):
+            original = self.X_val[idx]
+            recon = preds[idx]
+
+            mse = np.mean((original - recon) ** 2)
+            mae = np.mean(np.abs(original - recon))
+            diff = np.abs(original - recon)
+            max_diff = np.max(diff)
+            mean_diff = np.mean(diff)
+            std_diff = np.std(diff)
+
+            stats.append({
+                "index": idx,
+                "mse_loss": mse,
+                "mae_loss": mae,
+                "max_diff": max_diff,
+                "mean_diff": mean_diff,
+                "std_diff": std_diff,
+                "channel_count": original.shape[-1],
+            })
+
+        df = pd.DataFrame(stats)
+
+        output_path = Path("output/validation_metrics.csv")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(output_path, index=False)
+        print(f"✅ Evaluation metrics saved to {output_path}")
+
+        return df
+
+
 def main():
     trainer = SARAutoencoderTrainer(patch_dir="/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches")
     trainer.load_data()
@@ -138,6 +187,10 @@ def main():
     trainer.train(epochs=20)
     trainer.save_model()
     trainer.show_reconstruction()
+    trainer.show_reconstruction()
+    eval_df = trainer.evaluate_validation_set()
+    print(eval_df.head())
+
 
 if __name__ == "__main__":
     main()
