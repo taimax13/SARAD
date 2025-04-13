@@ -2,9 +2,10 @@ import numpy as np
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, UpSampling2D
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.layers import Dropout
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, UpSampling2D, Dropout, BatchNormalization
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -44,28 +45,45 @@ class SARAutoencoderTrainer:
         print(f"📦 Loaded {len(patches)} patches → Train: {len(self.X_train)}, Val: {len(self.X_val)}")
 
     def build_model(self, input_shape=None):
-        if input_shape is None:
-            input_shape = self.input_shape  # use detected shape
 
-        print(f"🛠️ Building model with input shape: {input_shape}")
+        if input_shape is None:
+            input_shape = self.input_shape
+
+        print(f"🛠️ Building deep autoencoder with input shape: {input_shape}")
         output_channels = input_shape[-1]
 
         self.model = Sequential([
-            Conv2D(32, (3, 3), activation='relu', padding='same', input_shape=input_shape),
+            # ENCODER
+            Conv2D(64, (3, 3), activation='relu', padding='same', input_shape=input_shape),
             MaxPooling2D((2, 2), padding='same'),
-            Conv2D(16, (3, 3), activation='relu', padding='same'),
+
+            Conv2D(32, (3, 3), activation='relu', padding='same'),
             MaxPooling2D((2, 2), padding='same'),
 
             Conv2D(16, (3, 3), activation='relu', padding='same'),
+            MaxPooling2D((2, 2), padding='same'),
+
+            # BOTTLENECK
+            Conv2D(8, (3, 3), activation='relu', padding='same'),
+
+            # DECODER
+            UpSampling2D((2, 2)),
+            Conv2D(16, (3, 3), activation='relu', padding='same'),
+
             UpSampling2D((2, 2)),
             Conv2D(32, (3, 3), activation='relu', padding='same'),
-            UpSampling2D((2, 2)),
-            Conv2D(output_channels, (3, 3), activation='sigmoid', padding='same')  # dynamically match output channels
-        ])
-        self.model.compile(optimizer=Adam(1e-3), loss='mse')
-        print("✅ Autoencoder model compiled.")
 
-    def train(self, epochs=100, batch_size=16):
+            UpSampling2D((2, 2)),
+            Conv2D(64, (3, 3), activation='relu', padding='same'),
+
+            # OUTPUT
+            Conv2D(output_channels, (3, 3), activation='sigmoid', padding='same')
+        ])
+        #self.model.compile(optimizer=Adam(1e-3), loss='mse')
+        self.model.compile(optimizer=Adam(1e-3), loss='binary_crossentropy')
+        print("✅ Deep Autoencoder model compiled.")
+
+    def train(self, epochs=50, batch_size=16):
         if self.model is None:
             raise ValueError("Model not built yet. Call build_model() first.")
         if self.X_train is None:
@@ -184,7 +202,7 @@ def main():
     trainer = SARAutoencoderTrainer(patch_dir="/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches")
     trainer.load_data()
     trainer.build_model()
-    trainer.train(epochs=20)
+    trainer.train(epochs=50)
     trainer.save_model()
     trainer.show_reconstruction()
     trainer.show_reconstruction()
