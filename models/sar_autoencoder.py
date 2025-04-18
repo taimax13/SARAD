@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 class SARAutoencoderTrainer:
-    def __init__(self, patch_dir: str, save_path: str = "models/sar_autoencoder.h5"):
+    def __init__(self, patch_dir: str, save_path: str = "/Users/talexm/models/sar_autoencoder.h5"):
         self.patch_dir = Path(patch_dir)
         self.save_path = Path(save_path)
         self.model = None
@@ -45,11 +45,10 @@ class SARAutoencoderTrainer:
         print(f"📦 Loaded {len(patches)} patches → Train: {len(self.X_train)}, Val: {len(self.X_val)}")
 
     def build_model(self, input_shape=None):
-
         if input_shape is None:
             input_shape = self.input_shape
 
-        print(f"🛠️ Building deep autoencoder with input shape: {input_shape}")
+        print(f"🛠️ Building Stable++ Autoencoder with input shape: {input_shape}")
         output_channels = input_shape[-1]
 
         self.model = Sequential([
@@ -64,6 +63,7 @@ class SARAutoencoderTrainer:
             MaxPooling2D((2, 2), padding='same'),
 
             # BOTTLENECK
+            Dropout(0.2),
             Conv2D(8, (3, 3), activation='relu', padding='same'),
 
             # DECODER
@@ -99,6 +99,9 @@ class SARAutoencoderTrainer:
             callbacks=[early_stop]
         )
         self.plot_history(history)
+        # ✅ Evaluate train set after training -> for collibration
+        eval_df = self.evaluate_set(dataset = self.X_train, set_name="train", save_path=Path("output/train_metrics.csv"))
+        return eval_df
 
     def plot_history(self, history):
         plt.plot(history.history['loss'], label='Train Loss')
@@ -159,16 +162,20 @@ class SARAutoencoderTrainer:
             plt.tight_layout()
             plt.show()
 
-    def evaluate_validation_set(self):
-        if self.X_val is None:
-            raise ValueError("Validation data not loaded.")
+    def evaluate_set(self, dataset=None, set_name="validation", save_path=Path("output/validation_metrics.csv")):
+        if dataset is None:
+            dataset = self.X_val
+            set_name = "validation"
 
-        print("📊 Evaluating reconstructions...")
-        preds = self.model.predict(self.X_val)
+        if dataset is None or len(dataset) == 0:
+            raise ValueError(f"{set_name.capitalize()} data is not available.")
+
+        print(f"📊 Evaluating {set_name} set reconstructions...")
+        preds = self.model.predict(dataset)
         stats = []
 
-        for idx in range(len(self.X_val)):
-            original = self.X_val[idx]
+        for idx in range(len(dataset)):
+            original = dataset[idx]
             recon = preds[idx]
 
             mse = np.mean((original - recon) ** 2)
@@ -190,10 +197,14 @@ class SARAutoencoderTrainer:
 
         df = pd.DataFrame(stats)
 
-        output_path = Path("output/validation_metrics.csv")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(output_path, index=False)
-        print(f"✅ Evaluation metrics saved to {output_path}")
+        if save_path is None:
+            save_path = Path(f"output/{set_name}_metrics.csv")
+        else:
+            save_path = Path(save_path)
+
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(save_path, index=False)
+        print(f"✅ {set_name.capitalize()} set metrics saved to {save_path}")
 
         return df
 
@@ -206,7 +217,7 @@ def main():
     trainer.save_model()
     trainer.show_reconstruction()
     trainer.show_reconstruction()
-    eval_df = trainer.evaluate_validation_set()
+    eval_df = trainer.evaluate_set()
     print(eval_df.head())
 
 

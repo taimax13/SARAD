@@ -52,7 +52,14 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+models/output/
+models/output/*
+models/output/*.csv
 
+mini_cases/data/patches/test/
+mini_cases/data/patches/test/*
+
+evaluators/output/test_anomaly_results.csv
 # Translations
 *.mo
 *.pot
