@@ -45,6 +45,14 @@ class SARPatcher:
         if image.ndim == 4:  # (N, H, W, C)
             for i, single_image in enumerate(image):
                 h, w, c = single_image.shape
+
+                # ✅ Skip patching if image already matches patch size
+                if hasattr(self, "skip_if_small") and self.skip_if_small and (h, w) == (
+                self.patch_size, self.patch_size):
+                    print(f"⚠️ Skipping patching for image {i}, already patch-sized: {single_image.shape}")
+                    count += save_patch(single_image, i, count)
+                    continue
+
                 if h < self.patch_size or w < self.patch_size:
                     print(f"⚠️ Skipping image {i}, too small: {single_image.shape}")
                     continue

@@ -1,3 +1,5 @@
+from collections import Counter
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -7,6 +9,7 @@ import geemap
 import pyarrow
 import boto3
 import rasterio
+from skimage.transform import resize
 import warnings
 from rasterio.errors import NotGeoreferencedWarning
 warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
@@ -45,19 +48,144 @@ class DataCollector:
 
     def download_sentinel_data_gee(self):
         print("🌍 Fetching Sentinel-1 GRD data from GEE...")
-        dataset = (
+        images = self.get_image_list_from_gee(max_images=50)
+
+        print(f"📸 Number of images to process: {len(images)}")
+        arrays, shapes = [], []
+
+        for i, image in enumerate(images):
+            try:
+                print(f"📥 Processing image {i + 1}/{len(images)}...")
+                arr = self.fetch_numpy_array(image)
+                if arr is None or np.isnan(arr).all():
+                    print(f"⚠️ Image {i} returned empty or NaNs. Skipping.")
+                    continue
+                shapes.append(arr.shape)
+                arrays.append((i, arr))
+            except Exception as e:
+                print(f"❌ Failed image {i}: {e}")
+
+        if not arrays:
+            raise RuntimeError("❌ No valid SAR images collected.")
+
+        target_shape = self.get_most_common_shape(shapes)
+        print(f"📏 Most common shape: {target_shape}")
+
+        normalized = []
+        for i, arr in arrays:
+            if arr.shape != target_shape:
+                print(f"🔄 Resizing image {i} from {arr.shape} to {target_shape}")
+                arr = self.resize_to_target(arr, target_shape)
+            normalized.append(arr)
+
+        final_array = np.stack(normalized)
+        print(f"📐 Final stacked shape: {final_array.shape}")
+
+        output_path = Path("data/collected_sar_array.npy")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        np.save(output_path, final_array)
+        print(f"💾 Saved SAR array to {output_path}")
+
+        return pd.DataFrame([{
+            "image_count": len(normalized),
+            "array_shape": str(final_array.shape),
+            "saved_path": str(output_path)
+        }])
+
+    def get_image_list_from_gee(self, max_images=50):
+        collection = (
             ee.ImageCollection("COPERNICUS/S1_GRD")
             .filterBounds(self.roi)
-            .filterDate("2025-01-01", "2025-03-31")
+            .filterDate("2024-07-01", "2025-03-31")
             .filter(ee.Filter.eq("instrumentMode", "IW"))
             .select(["VV", "VH"])
         )
-        count = dataset.size().getInfo()
-        print(f"📸 Number of Sentinel-1 images found: {count}")
+        total = collection.size().getInfo()
+        print(f"📸 Total available: {total}")
+        images = collection.toList(min(total, max_images))
+        return [ee.Image(images.get(i)).clip(self.roi) for i in range(min(total, max_images))]
 
-        sar_image = dataset.median().clip(self.roi)
-        print("🛰️ Image metadata:", sar_image.getInfo())
-        return sar_image
+    def fetch_numpy_array(self, image):
+        return geemap.ee_to_numpy(image, region=self.roi, bands=["VV", "VH"], scale=10)
+
+    def get_most_common_shape(self, shapes):
+        return Counter(shapes).most_common(1)[0][0]
+
+    def resize_to_target(self, arr, target_shape):
+        return resize(arr, target_shape, preserve_range=True, anti_aliasing=True).astype(np.float32)
+    # --- Sub-methods ---
+
+    def _process_image_collection(self, dataset, max_images=50):
+        images = dataset.toList(max_images)
+        raw_arrays = []
+        shape_counter = Counter()
+
+        for i in range(max_images):
+            image = ee.Image(images.get(i)).clip(self.roi)
+            try:
+                arr = self._download_image_array(image, i, max_images)
+                if arr is None:
+                    continue
+
+                arr = self._normalize_image_shape(arr)
+                shape_counter[arr.shape] += 1
+                raw_arrays.append((i, arr))
+
+            except Exception as e:
+                print(f"❌ Failed to process image {i}: {e}")
+
+        if not raw_arrays:
+            raise RuntimeError("❌ No valid images collected from GEE.")
+
+        # ✅ Determine most common shape
+        most_common_shape = shape_counter.most_common(1)[0][0]
+        print(f"📏 Most common shape: {most_common_shape}")
+
+        # ✅ Normalize all arrays to most common shape
+        collected_arrays = []
+        for i, arr in raw_arrays:
+            if arr.shape != most_common_shape:
+                print(f"🔄 Resizing image {i} from {arr.shape} to {most_common_shape}")
+                arr = resize(arr, most_common_shape, preserve_range=True, anti_aliasing=True).astype(np.float32)
+            collected_arrays.append(arr)
+
+        return self._save_and_return_stack(collected_arrays)
+
+    def _download_image_array(self, image, index, total):
+        print(f"📥 Processing image {index + 1}/{total}...")
+        arr = geemap.ee_to_numpy(image, region=self.roi, bands=["VV", "VH"], scale=10)
+
+        if arr is None or np.isnan(arr).all():
+            print(f"⚠️ Image {index} returned empty or all-NaN array. Skipping.")
+            return None
+
+        return arr
+
+    def _normalize_image_shape(self, arr):
+        if arr.ndim == 2:
+            return np.expand_dims(arr, -1)
+        return arr
+
+    def _ensure_shape_consistency(self, arr, target_shape, index):
+        if arr.shape != target_shape:
+            print(f"🔄 Resizing image {index} from {arr.shape} to {target_shape}")
+            arr = resize(arr, target_shape, preserve_range=True, anti_aliasing=True).astype(np.float32)
+        return arr
+
+    def _save_and_return_stack(self, collected_arrays):
+        final_array = np.stack(collected_arrays)
+        print(f"📐 Final stacked SAR array shape: {final_array.shape}")
+
+        output_array_path = Path("data/collected_sar_array.npy")
+        output_array_path.parent.mkdir(parents=True, exist_ok=True)
+        np.save(output_array_path, final_array)
+        print(f"💾 SAR array saved to {output_array_path}")
+
+        return pd.DataFrame([{
+            "image_count": len(collected_arrays),
+            "array_shape": str(final_array.shape),
+            "saved_path": str(output_array_path)
+        }])
 
     def download_sentinel_data_s3(self):
         print(f"📡 Downloading SAR data from S3 bucket: {self.s3_bucket}/{self.s3_prefix}")
@@ -152,4 +280,4 @@ def main2():
 
 
 if __name__ == "__main__":
-    main2()
+    main()
