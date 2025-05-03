@@ -2,7 +2,8 @@ import numpy as np
 import tensorflow as tf
 from pathlib import Path
 import pandas as pd
-
+import matplotlib.pyplot as plt
+import seaborn as sns
 from SARAD.models.sar_var_autoencoder import Sampling
 
 
@@ -59,13 +60,16 @@ class VAEAnomalyEvaluator:
         loss = loss_fn(original.flatten(), reconstructed.flatten()).numpy()
         return loss
 
+    def normalize_sar(self, img, min_db=-30, max_db=0):
+        img = np.clip(img, min_db, max_db)
+        return (img - min_db) / (max_db - min_db)
+
+
     def evaluate(self, image: np.ndarray) -> dict:
-        img = image.astype(np.float32) / 255.0
+        img = self.normalize_sar(image)
         img = np.expand_dims(img, axis=(0, -1)) if img.ndim == 2 else np.expand_dims(img, axis=0)
 
-        reconstructed, _ = self.model.predict(img, verbose=0)
-        reconstructed = reconstructed[0]
-
+        reconstructed = self.model.predict(img, verbose=0)[0]
         recon_loss = self.compute_reconstruction_loss(img[0], reconstructed)
         is_anomalous = recon_loss > self.threshold
 
@@ -198,7 +202,7 @@ def main():
             "file": patch_file.name,
             "reconstruction_loss": bce,
             "p_value": p_value,
-            "is_anomalous": p_value < 0.05  # Example threshold
+            "is_anomalous": p_value < threshold
         })
 
     df = pd.DataFrame(test_patches)
@@ -220,6 +224,28 @@ def main():
     for file in anomalies["file"][:3]:
         img = np.load("/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches/test2/" + file)
         evaluator.plot_anomaly(img, mean_loss, std_loss)
+
+    # Load the CSVs
+    train_df = pd.read_csv("/Users/talexm/PyProcessing/AnomalyDetector /SARAD/models/output/train_metrics_new.csv")
+    test_df = pd.read_csv("/Users/talexm/PyProcessing/AnomalyDetector /SARAD/evaluators/models/output/test2_eval.csv")
+
+    # Add dataset label
+    train_df["dataset"] = "train"
+    test_df["dataset"] = "test"
+
+    # Plot
+    plt.figure(figsize=(10, 6))
+    sns.histplot(train_df["p_value"], color="green", label="Train", kde=True, stat="density", bins=50)
+    sns.histplot(test_df["p_value"], color="purple", label="Test", kde=True, stat="density", bins=50)
+
+    plt.title("P-value Distribution — Train vs Test")
+    plt.xlabel("P-value")
+    plt.ylabel("Density")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
 
 if __name__ == "__main__":
     main()
