@@ -213,7 +213,19 @@ class DataCollector:
 
     def extract_features_gee(self, sar_image):
         print("🧪 Extracting full SAR array from GEE...")
-        sar_numpy = geemap.ee_to_numpy(sar_image, region=self.roi, bands=["VV", "VH"], scale=10)
+
+        # 🛑 If sar_image is already DataFrame, assume extracted
+        if isinstance(sar_image, pd.DataFrame):
+            print("✅ sar_image is already a DataFrame, skipping GEE extraction")
+            return sar_image
+
+        # 🛑 If sar_image is already numpy array, skip
+        if isinstance(sar_image, np.ndarray):
+            print("✅ sar_image is already a numpy array, skipping GEE extraction")
+            sar_numpy = sar_image
+        else:
+            # 🧪 Otherwise, assume sar_image is a GEE ee.Image
+            sar_numpy = geemap.ee_to_numpy(sar_image, region=self.roi, bands=["VV", "VH"], scale=10)
 
         print("📐 Extracted SAR array shape:", sar_numpy.shape)
         print("📊 VV min/max:", np.nanmin(sar_numpy[..., 0]), np.nanmax(sar_numpy[..., 0]))
