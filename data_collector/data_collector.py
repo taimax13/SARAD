@@ -79,6 +79,7 @@ class DataCollector:
             normalized.append(arr)
 
         final_array = np.stack(normalized)
+        print(f"✅ First element shape: {final_array[0].shape}")
         print(f"📐 Final stacked shape: {final_array.shape}")
 
         output_path = Path("data/collected_sar_array.npy")
@@ -266,6 +267,42 @@ class DataCollector:
         features.to_parquet(output_path, index=False)
         print(f"💾 Features saved to {output_path}")
 
+def test_all_img_valid():
+    from pathlib import Path
+    import numpy as np
+
+    path = Path("data/collected_sar_array.npy")
+    if not path.exists():
+        print("❌ File not found. Did you run the collector first?")
+        return
+
+    arr = np.load(path, allow_pickle=False)
+    print(f"✅ Loaded full array with shape: {arr.shape}, dtype: {arr.dtype}")
+
+    invalid_count = 0
+
+    for i, patch in enumerate(arr):
+        try:
+            if not isinstance(patch, np.ndarray):
+                raise TypeError(f"Type is {type(patch)}, not ndarray")
+
+            if patch.ndim < 2:
+                raise ValueError(f"0D or 1D array with shape: {patch.shape}")
+
+            if np.isnan(patch).all():
+                raise ValueError("Patch is entirely NaN")
+
+            print(f"✅ patch_{i:02d} is valid: shape={patch.shape}, dtype={patch.dtype}")
+
+        except Exception as e:
+            print(f"❌ patch_{i:02d} is invalid: {e}")
+            invalid_count += 1
+
+    if invalid_count == 0:
+        print("🎉 All patches are valid!")
+    else:
+        print(f"⚠️ {invalid_count} patches are invalid and may cause RX processing to fail.")
+
 
 def main():
     from sentinelhub import BBox, CRS
@@ -279,6 +316,7 @@ def main():
         gee_project='asterra-454018'
     )
     collector.collect_metrics()
+    test_all_img_valid()
 
 def main2():
     # Local test case

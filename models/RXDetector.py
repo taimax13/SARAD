@@ -1,78 +1,65 @@
 import numpy as np
+import pandas as pd
 from pathlib import Path
 from scipy.spatial import distance
 from typing import Union
-import cv2
+import matplotlib.pyplot as plt
+
 
 class RXDetector:
-    def __init__(self, input_dir: Union[str, Path]):
-        self.input_dir = Path(input_dir)
-        self.input_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, input_data: Union[str, Path], output_dir: Union[str, Path]):
+        self.input_data = Path(input_data)
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def load_image(self, filename: str) -> np.ndarray:
-        path = self.input_dir / filename
-        image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
-        if image is None:
-            raise FileNotFoundError(f"Image not found at: {path}")
-        return image
+    def to_2d_safe(self, arr: np.ndarray, name: str) -> np.ndarray:
+        print(f"👀 Pre-check {name}: shape={arr.shape}, dtype={arr.dtype}")
+
+        if arr.ndim == 0:
+            raise ValueError("0D scalar patch.")
+        elif arr.ndim == 1:
+            return np.expand_dims(arr, axis=0)
+        elif arr.ndim == 2:
+            return arr
+        elif arr.ndim == 3 and arr.shape[-1] in [1, 2]:
+            return arr
+        elif arr.ndim > 3:
+            arr = arr.squeeze()
+            return self.to_2d_safe(arr, name)
+        else:
+            raise ValueError(f"Unsupported array shape: {arr.shape}")
 
     def compute_rx_map(self, image: np.ndarray) -> np.ndarray:
-        reshaped = image.reshape(-1, 1).astype(np.float64)
-        mean = np.mean(reshaped, axis=0)
-        cov = np.cov(reshaped.T)
-        inv_cov = np.linalg.pinv(cov)
+        if image.ndim == 2:
+            reshaped = image.reshape(-1, 1).astype(np.float64)
+        elif image.ndim == 3 and image.shape[-1] == 2:
+            reshaped = image.reshape(-1, 2).astype(np.float64)
+        else:
+            raise ValueError(f"Unsupported image shape: {image.shape}")
 
+        if np.isnan(reshaped).all() or np.std(reshaped, axis=0).min() == 0:
+            raise ValueError("Flat or NaN-only patch — RX cannot be computed.")
+
+        mean = np.mean(reshaped, axis=0)
+        cov = np.cov(reshaped, rowvar=False)
+
+        if cov.ndim < 2:
+            raise ValueError("Covariance matrix is degenerate or 0D.")
+
+        inv_cov = np.linalg.pinv(cov)
         scores = [distance.mahalanobis(p, mean, inv_cov) for p in reshaped]
-        rx_map = np.array(scores).reshape(image.shape)
-        return rx_map
+        return np.array(scores).reshape(image.shape[:2])
 
     def compute_max_score(self, rx_map: np.ndarray) -> float:
-        return np.max(rx_map)
-
-    def process_image(self, filename: str, save_fmt: str = "npz") -> float:
-        print(f"Computing RX for {filename}...")
-        image = self.load_image(filename)
-        rx_map = self.compute_rx_map(image)
-        max_score = self.compute_max_score(rx_map)
-        self.save_rx_heatmap(rx_map, Path(filename).stem, fmt=save_fmt)
-        print(f"Saved RX map in .{save_fmt} format. Max RX Score: {max_score:.4f}")
-        return max_score
-
-    def batch_process(self, save_fmt: str = "npz") -> dict:
-        results = {}
-        for file in self.input_dir.glob("*.*"):
-            try:
-                if file.suffix.lower() == ".npy":
-                    image = np.load(file)
-                    name = file.stem
-                else:
-                    image = self.load_image(file.name)
-                    name = Path(file.name).stem
-
-                rx_map = self.compute_rx_map(image)
-                max_score = self.compute_max_score(rx_map)
-                self.save_rx_heatmap(rx_map, name, fmt=save_fmt)
-                results[file.name] = max_score
-            except Exception as e:
-                print(f"⚠️ Error in {file.name}: {e}")
-        return results
-
-    # self.save_rx_heatmap(rx_map, image_name)  # default = .npz
-    # self.save_rx_heatmap(rx_map, image_name, fmt="png")  # optional .png for inspection
+        return float(np.max(rx_map))
 
     def save_rx_heatmap(self, rx_map: np.ndarray, image_name: str, fmt: str = "npz"):
-        """
-        Save RX heatmap in the specified format.
-        Supported: 'npz' (default), 'npy', 'png'
-        """
         out_path = self.output_dir / f"{image_name}_rx.{fmt}"
-
         if fmt == "npz":
             np.savez_compressed(out_path, rx_map=rx_map)
         elif fmt == "npy":
             np.save(out_path, rx_map)
         elif fmt == "png":
-            import matplotlib.pyplot as plt
             plt.figure(figsize=(6, 6))
             plt.imshow(rx_map, cmap='hot')
             plt.colorbar(label='RX Score')
@@ -81,54 +68,161 @@ class RXDetector:
             plt.savefig(out_path)
             plt.close()
         else:
-            raise ValueError(f"Unsupported format '{fmt}'. Choose 'npz', 'npy', or 'png'.")
+            raise ValueError(f"Unsupported format '{fmt}'.")
 
-def main():
-    input_dir = "path/to/cleaned_images"     # folder with cleaned SAR images or patches
-    output_dir = "path/to/rx_heatmaps"        # where RX maps will be stored
-    save_format = "npz"                       # options: "npz", "npy", "png"
+
+def main2():
+    input_npy = "/Users/talexm/PyProcessing/AnomalyDetector /SARAD/data_collector/data/collected_sar_array.npy"
+    output_dir = "./output/rx_heatmaps"
+    save_format = "npz"
     top_n = 5
 
-    rx = RXDetector(input_dir, output_dir)
-    print(f"🚀 Starting RX batch anomaly detection on: {input_dir}")
-    results = rx.batch_process(save_fmt=save_format)
+    patches = np.load(input_npy)
+    print(f"🚀 Starting RX anomaly detection on stacked array of shape: {patches.shape}")
 
-    print("\n✅ RX processing completed.")
-    print("📊 Summary of max RX scores:")
-    for name, score in results.items():
-        print(f"{name}: {score:.4f}")
-        # Export results to CSV
-        df = pd.DataFrame(list(results.items()), columns=["Filename", "Max_RX_Score"])
-        csv_path = Path(output_dir) / "rx_scores.csv"
-        df.to_csv(csv_path, index=False)
-        print(f"📁 RX scores saved to CSV: {csv_path}")
+    rx = RXDetector(input_data=input_npy, output_dir=output_dir)
+    results = {}
 
-        # Visualize top N anomalies
-        top_anomalies = df.sort_values(by="Max_RX_Score", ascending=False).head(top_n)
-        print(f"\n👀 Top {top_n} anomalies based on RX Score:")
+    for i, patch in enumerate(patches):
+        try:
+            patch_2d = rx.to_2d_safe(patch, f"patch_{i}")
+            rx_map = rx.compute_rx_map(patch_2d)
+            max_score = rx.compute_max_score(rx_map)
+            rx.save_rx_heatmap(rx_map, f"patch_{i}", fmt=save_format)
+            results[f"patch_{i}"] = max_score
+        except Exception as e:
+            print(f"⚠️ Skipping patch_{i}: {type(e).__name__}: {e}")
 
-        for i, row in top_anomalies.iterrows():
-            image_name = row["Filename"]
-            print(f"{image_name}: {row['Max_RX_Score']:.4f}")
+    df = pd.DataFrame(list(results.items()), columns=["Patch", "Max_RX_Score"])
+    csv_path = Path(output_dir) / "rx_scores.csv"
+    df.to_csv(csv_path, index=False)
+    print(f"📁 RX scores saved to CSV: {csv_path}")
 
-            # Show corresponding RX map if it's a .png or recreate from .npz
-            rx_path = Path(output_dir) / f"{Path(image_name).stem}_rx.{save_format}"
-            if rx_path.exists():
-                if save_format == "png":
-                    img = plt.imread(rx_path)
-                elif save_format in ["npz", "npy"]:
-                    if save_format == "npz":
-                        img = np.load(rx_path)["rx_map"]
-                    else:
-                        img = np.load(rx_path)
+    #top_anomalies = df.sort_values(by="Max_RX_Score", ascending=False).head(top_n)
 
-                plt.figure(figsize=(5, 5))
-                plt.imshow(img, cmap='hot')
-                plt.title(f"RX Heatmap: {image_name}")
-                plt.colorbar()
-                plt.axis('off')
-                plt.tight_layout()
-                plt.show()
+    mean_score = df["Max_RX_Score"].mean()
+    std_score = df["Max_RX_Score"].std()
+    threshold = df["Max_RX_Score"].quantile(0.95)
+
+    print(f"\n📊 RX Anomaly Threshold: mean={mean_score:.4f}, std={std_score:.4f}, threshold={threshold:.4f}")
+
+    df["is_anomaly"] = df["Max_RX_Score"] > threshold
+    top_anomalies = df[df["is_anomaly"]].copy()
+
+    print(f"🚨 Found {len(top_anomalies)} statistically significant anomalies (score > mean + 2*std)")
+
+    # Or optionally: score > 95th percentile
+    # threshold = df["Max_RX_Score"].quantile(0.95)
+
+    print(f"\n👀 Top {top_n} anomalies:")
+    for _, row in top_anomalies.iterrows():
+        print(f"{row['Patch']}: {row['Max_RX_Score']:.4f}")
+        rx_path = Path(output_dir) / f"{row['Patch']}_rx.{save_format}"
+        if rx_path.exists() and save_format == "png":
+            img = plt.imread(rx_path)
+            plt.imshow(img, cmap='hot')
+            plt.title(row['Patch'])
+            plt.colorbar()
+            plt.axis('off')
+            plt.show()
+
+    # Show the top N anomaly maps
+    print(f"\n📸 Displaying top {top_n} anomaly heatmaps with original SAR patches:")
+    for _, row in top_anomalies.iterrows():
+        patch_id = row['Patch']
+        rx_path = Path(output_dir) / f"{patch_id}_rx.{save_format}"
+        patch_idx = int(patch_id.split("_")[1])  # Extract number from "patch_XX"
+
+        # Load RX map
+        if not rx_path.exists():
+            print(f"⚠️ Missing RX file for {patch_id}")
+            continue
+
+        if save_format == "npz":
+            rx_map = np.load(rx_path)["rx_map"]
+        elif save_format == "npy":
+            rx_map = np.load(rx_path)
+        else:
+            print(f"⚠️ Unsupported format: {save_format}")
+            continue
+
+        # Load original SAR patch (VV + VH)
+        original_patch = patches[patch_idx]  # shape: (H, W, 2)
+
+        # Display side by side
+        fig, axs = plt.subplots(1, 3, figsize=(16, 6))
+
+        axs[0].imshow(original_patch[..., 0], cmap='gray')
+        axs[0].set_title(f"{patch_id} - VV Band")
+        axs[0].axis('off')
+
+        axs[1].imshow(original_patch[..., 1], cmap='gray')
+        axs[1].set_title(f"{patch_id} - VH Band")
+        axs[1].axis('off')
+
+        axs[2].imshow(rx_map, cmap='hot')
+        axs[2].set_title(f"RX Score: {row['Max_RX_Score']:.4f}")
+        axs[2].axis('off')
+
+        plt.suptitle(f"Patch: {patch_id}", fontsize=14)
+        plt.tight_layout()
+        plt.show()
+
+    # 🎯 Find a "normal" patch (score close to median)
+    median_score = df["Max_RX_Score"].median()
+    df["score_diff_from_median"] = (df["Max_RX_Score"] - median_score).abs()
+    normal_patch_row = df.sort_values("score_diff_from_median").iloc[0]
+    normal_patch_id = normal_patch_row["Patch"]
+    normal_patch_idx = int(normal_patch_id.split("_")[1])
+
+    print(f"\n🔍 Comparing anomaly vs normal:")
+    print(f"🔥 Anomaly: {top_anomalies.iloc[0]['Patch']} - Score: {top_anomalies.iloc[0]['Max_RX_Score']:.4f}")
+    print(f"✅ Normal:  {normal_patch_id} - Score: {normal_patch_row['Max_RX_Score']:.4f}")
+
+    # Load anomaly
+    anomaly_patch_id = top_anomalies.iloc[0]["Patch"]
+    anomaly_idx = int(anomaly_patch_id.split("_")[1])
+    anomaly_patch = patches[anomaly_idx]
+    anomaly_rx_path = Path(output_dir) / f"{anomaly_patch_id}_rx.{save_format}"
+    anomaly_rx = np.load(anomaly_rx_path)["rx_map"] if save_format == "npz" else np.load(anomaly_rx_path)
+
+    # Load normal
+    normal_patch = patches[normal_patch_idx]
+    normal_rx_path = Path(output_dir) / f"{normal_patch_id}_rx.{save_format}"
+    normal_rx = np.load(normal_rx_path)["rx_map"] if save_format == "npz" else np.load(normal_rx_path)
+
+    # Show side-by-side comparison
+    fig, axs = plt.subplots(2, 3, figsize=(16, 10))
+
+    axs[0, 0].imshow(anomaly_patch[..., 0], cmap="gray")
+    axs[0, 0].set_title(f"{anomaly_patch_id} - VV (Anomaly)")
+    axs[0, 0].axis("off")
+
+    axs[0, 1].imshow(anomaly_patch[..., 1], cmap="gray")
+    axs[0, 1].set_title(f"{anomaly_patch_id} - VH")
+    axs[0, 1].axis("off")
+
+    axs[0, 2].imshow(anomaly_rx, cmap="hot")
+    axs[0, 2].set_title(f"RX Score: {top_anomalies.iloc[0]['Max_RX_Score']:.4f}")
+    axs[0, 2].axis("off")
+
+    axs[1, 0].imshow(normal_patch[..., 0], cmap="gray")
+    axs[1, 0].set_title(f"{normal_patch_id} - VV (Normal)")
+    axs[1, 0].axis("off")
+
+    axs[1, 1].imshow(normal_patch[..., 1], cmap="gray")
+    axs[1, 1].set_title(f"{normal_patch_id} - VH")
+    axs[1, 1].axis("off")
+
+    axs[1, 2].imshow(normal_rx, cmap="hot")
+    axs[1, 2].set_title(f"RX Score: {normal_patch_row['Max_RX_Score']:.4f}")
+    axs[1, 2].axis("off")
+
+    plt.suptitle("Anomaly vs Normal Patch Comparison", fontsize=16)
+    plt.tight_layout()
+    plt.show()
+
+
 
 if __name__ == "__main__":
-    main()
+    main2()
