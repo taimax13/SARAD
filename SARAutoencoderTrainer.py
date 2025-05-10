@@ -30,11 +30,37 @@ class SARAutoencoderTrainer:
         files = list(self.patch_dir.glob("**/*.npy"))
         if limit:
             files = files[:limit]
-        patches = [np.load(f) for f in files]
-        patches = np.array(patches).astype(np.float32) / 255.0
-        patches = np.expand_dims(patches, -1)  # (N, H, W, 1)
+
+        valid_patches = []
+        for f in files:
+            patch = np.load(f)
+
+            if patch.ndim == 2:
+                patch = np.expand_dims(patch, axis=-1)  # (128,128,1)
+
+            # Acceptable: (128,128,1) → duplicate channel to make it (128,128,2)
+            if patch.shape == (128, 128, 1):
+                patch = np.concatenate([patch, patch], axis=-1)
+
+            # Acceptable: already in correct shape
+            elif patch.shape == (128, 128, 2):
+                pass
+
+            # ❌ All other shapes: skip
+            else:
+                print(f"⚠️ Skipping malformed patch {f.name} with shape {patch.shape}")
+                continue
+
+            valid_patches.append(patch)
+
+        if not valid_patches:
+            raise ValueError("❌ No valid patches found in directory!")
+
+        patches = np.array(valid_patches).astype(np.float32) / 255.0
+
         self.X_train, self.X_val = train_test_split(patches, test_size=0.1, random_state=42)
         print(f"📦 Loaded {len(patches)} patches → Train: {len(self.X_train)}, Val: {len(self.X_val)}")
+        return patches
 
     def build_model(self, input_shape=(256, 256, 1)):
         self.model = Sequential([
