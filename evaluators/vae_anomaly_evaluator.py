@@ -16,6 +16,24 @@ class VAEAnomalyEvaluator:
             self.threshold = 0.1  # Default threshold if none computed yet
             print(f"⚠️ No threshold provided. Using default {self.threshold}")
 
+    @staticmethod
+    def add_salt_pepper_on_real_image(img: np.ndarray, amount: float = 0.05, salt_vs_pepper: float = 0.5):
+        output = img.copy()
+        h, w = img.shape[:2]
+        num_pixels = int(h * w * amount)
+
+        # Salt (white)
+        num_salt = int(num_pixels * salt_vs_pepper)
+        coords_salt = (np.random.randint(0, h, num_salt), np.random.randint(0, w, num_salt))
+        output[coords_salt] = output.max()  # white dots
+
+        # Pepper (black)
+        num_pepper = num_pixels - num_salt
+        coords_pepper = (np.random.randint(0, h, num_pepper), np.random.randint(0, w, num_pepper))
+        output[coords_pepper] = output.min()  # black dots
+
+        return output
+
     def create_synthetic_anomaly_set(self, source_folder: str, dest_folder: str, anomaly_fraction: float = 0.2):
         """
         Copies patches from source_folder to dest_folder.
@@ -41,11 +59,17 @@ class VAEAnomalyEvaluator:
             # Randomly corrupt some images
             if idx in anomaly_indices:
                 patch_file_name = patch_file.stem + "_A.npy"
-                # Example corruption: add random noise
-                corrupted = random_noise(img, mode='s&p', amount=0.05)  # salt & pepper noise
-                corrupted = np.clip(corrupted, 0, 1)
+
+                if img.ndim == 3 and img.shape[-1] == 2:
+                    corrupted = img.copy()
+                    for band in range(2):
+                        corrupted[..., band] = self.add_salt_pepper_on_real_image(corrupted[..., band], amount=0.05)
+                else:
+                    corrupted = self.add_salt_pepper_on_real_image(img, amount=0.05)
+
                 np.save(dest_folder / patch_file_name, corrupted)
                 print(f"🔴 Corrupted and saved: {patch_file_name}")
+
             else:
                 np.save(dest_folder / patch_file.name, img)
 
@@ -187,6 +211,27 @@ def main():
         source_folder="/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches/test",
         dest_folder="/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches/test2"
     )
+    # ### val corrupt
+    # anomaly_folder = Path("/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches/test2")
+    # anomaly_files = sorted(anomaly_folder.glob("*_A.npy"))
+    #
+    # print(f"📦 Found {len(anomaly_files)} anomaly patches.")
+    #
+    # for i, patch_file in enumerate(anomaly_files):
+    #     patch = np.load(patch_file)
+    #
+    #     plt.figure(figsize=(5, 4))
+    #
+    #     if patch.ndim == 3 and patch.shape[2] == 2:
+    #         plt.imshow(patch[..., 0], cmap='gray')  # Show VV band (you can change to patch[..., 1] for VH)
+    #         plt.title(f"{patch_file.name} (VV)")
+    #     else:
+    #         plt.imshow(patch, cmap='gray')
+    #         plt.title(patch_file.name)
+    #
+    #     plt.axis('off')
+    #     plt.tight_layout()
+    #     plt.show()
 
     # 2️⃣ Load train_metrics to get mean_loss and std_loss
     train_metrics = pd.read_csv("/Users/talexm/PyProcessing/AnomalyDetector /SARAD/models/output/train_metrics_new.csv")
