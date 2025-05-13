@@ -8,9 +8,51 @@ from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, UpSampling2D, Dropout, BatchNormalization
 import matplotlib.pyplot as plt
 import pandas as pd
+from tensorflow.keras import Model, Input
+from tensorflow.keras.layers import Lambda
+from tensorflow.keras.layers import Flatten
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Dropout, Conv2D, MaxPooling2D, UpSampling2D, BatchNormalization, Flatten, Dense, Input, Lambda, Reshape
+import tensorflow.keras.backend as K
+from tensorflow.keras.saving import register_keras_serializable
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, UpSampling2D, Dense, Flatten, Dropout, Input, Reshape, Conv2DTranspose
 
-class SARAutoencoderTrainer:
-    def __init__(self, patch_dir: str, save_path: str = "/Users/talexm/models/sar_autoencoder.h5"):
+import tensorflow as tf
+
+from tensorflow.keras.layers import Layer
+from tensorflow.keras.saving import register_keras_serializable
+
+
+from tensorflow.keras.layers import Layer
+from tensorflow import keras
+import tensorflow as tf
+
+@keras.saving.register_keras_serializable()
+class Sampling(Layer):
+    """Sampling layer using (mean, log_var)"""
+    def call(self, inputs):
+        mean, log_var = inputs
+        batch = tf.shape(mean)[0]
+        dim = tf.shape(mean)[1]
+        epsilon = tf.random.normal(shape=(batch, dim))
+        return mean + tf.exp(0.5 * log_var) * epsilon
+
+@keras.saving.register_keras_serializable()
+class KLDivergenceLayer(Layer):
+    """Identity transform layer that adds KL divergence to the final model loss."""
+    def call(self, inputs):
+        mean, log_var = inputs
+        kl_batch = -0.5 * K.sum(1 + log_var - K.square(mean) - K.exp(log_var), axis=-1)
+        self.add_loss(K.mean(kl_batch))
+        return inputs
+
+@keras.saving.register_keras_serializable()
+def dummy_kl_loss(y_true, y_pred):
+    """Dummy KL loss to satisfy Keras API for second output."""
+    return K.zeros_like(y_pred)
+
+class SARVarAutoencoderTrainer:
+    def __init__(self, patch_dir: str, save_path: str = "/Users/talexm/models/vae_model.h5"):
         self.patch_dir = Path(patch_dir)
         self.save_path = Path(save_path)
         self.model = None
@@ -44,44 +86,43 @@ class SARAutoencoderTrainer:
         self.X_train, self.X_val = train_test_split(patches, test_size=0.1, random_state=42)
         print(f"📦 Loaded {len(patches)} patches → Train: {len(self.X_train)}, Val: {len(self.X_val)}")
 
-    def build_model(self, input_shape=None):
+    def build_model(self, input_shape=None, n_layers=4, latent_dim=64):
         if input_shape is None:
             input_shape = self.input_shape
 
-        print(f"🛠️ Building Stable++ Autoencoder with input shape: {input_shape}")
-        output_channels = input_shape[-1]
+        inputs = Input(shape=input_shape)
+        x = inputs
 
-        self.model = Sequential([
-            # ENCODER
-            Conv2D(64, (3, 3), activation='relu', padding='same', input_shape=input_shape),
-            MaxPooling2D((2, 2), padding='same'),
+        # ENCODER
+        filters = 64
+        for _ in range(n_layers):
+            x = Conv2D(filters, (3, 3), activation='relu', padding='same')(x)
+            x = MaxPooling2D((2, 2), padding='same')(x)
+            filters *= 2  # grow deeper layers
 
-            Conv2D(32, (3, 3), activation='relu', padding='same'),
-            MaxPooling2D((2, 2), padding='same'),
+        shape_before_flattening = K.int_shape(x)[1:]
+        x_flat = Flatten()(x)
 
-            Conv2D(16, (3, 3), activation='relu', padding='same'),
-            MaxPooling2D((2, 2), padding='same'),
+        # LATENT SPACE
+        mean = Dense(latent_dim, name="z_mean")(x_flat)
+        log_var = Dense(latent_dim, name="z_log_var")(x_flat)
+        z = Sampling()([mean, log_var])
 
-            # BOTTLENECK
-            Dropout(0.2),
-            Conv2D(8, (3, 3), activation='relu', padding='same'),
+        # DECODER
+        x = Dense(np.prod(shape_before_flattening))(z)
+        x = Reshape(target_shape=shape_before_flattening)(x)
 
-            # DECODER
-            UpSampling2D((2, 2)),
-            Conv2D(16, (3, 3), activation='relu', padding='same'),
+        filters //= 2
+        for _ in range(n_layers):
+            x = Conv2DTranspose(filters, (3, 3), strides=2, activation='relu', padding='same')(x)
+            filters //= 2
 
-            UpSampling2D((2, 2)),
-            Conv2D(32, (3, 3), activation='relu', padding='same'),
+        outputs = Conv2D(input_shape[-1], (3, 3), activation='sigmoid', padding='same')(x)
 
-            UpSampling2D((2, 2)),
-            Conv2D(64, (3, 3), activation='relu', padding='same'),
+        model = Model(inputs, outputs)
+        model.compile(optimizer=Adam(1e-4), loss='binary_crossentropy')
 
-            # OUTPUT
-            Conv2D(output_channels, (3, 3), activation='sigmoid', padding='same')
-        ])
-        #self.model.compile(optimizer=Adam(1e-3), loss='mse')
-        self.model.compile(optimizer=Adam(1e-3), loss='binary_crossentropy')
-        print("✅ Deep Autoencoder model compiled.")
+        self.model = model
 
     def train(self, epochs=50, batch_size=16):
         if self.model is None:
@@ -98,9 +139,30 @@ class SARAutoencoderTrainer:
             batch_size=batch_size,
             callbacks=[early_stop]
         )
+
+        Path("output").mkdir(exist_ok=True)
+        history_df = pd.DataFrame(history.history)
+        history_df.to_csv("output/training_history.csv", index=False)
+        print("✅ Training history saved to output/training_history.csv")
+
         self.plot_history(history)
-        # ✅ Evaluate train set after training -> for collibration
-        eval_df = self.evaluate_set(dataset = self.X_train, set_name="train", save_path=Path("output/train_metrics.csv"))
+
+        # ✅ Evaluate train set after training -> for calibration
+        eval_df = self.evaluate_set(dataset=self.X_train, set_name="train", save_path=None)
+
+        # Calculate mean and std of reconstruction loss
+        mean_loss = eval_df['reconstruction_loss'].mean()
+        std_loss = eval_df['reconstruction_loss'].std()
+
+        print(f"📊 Mean reconstruction loss (BCE): {mean_loss:.5f}, Std: {std_loss:.5f}")
+
+        from scipy.stats import norm
+        eval_df['p_value'] = 1 - norm.cdf(eval_df['reconstruction_loss'], loc=mean_loss, scale=std_loss)
+
+        # ✅ Save final eval_df with p-values
+        eval_df.to_csv("output/train_metrics_new.csv", index=False)
+        print("✅ Train metrics with p-values saved to output/train_metrics.csv")
+
         return eval_df
 
     def plot_history(self, history):
@@ -133,13 +195,12 @@ class SARAutoencoderTrainer:
 
         actual_samples = min(num_samples, len(self.X_val))
         print(f"🖼️ Showing {actual_samples} reconstruction{'s' if actual_samples > 1 else ''}")
-
         idxs = random.sample(range(len(self.X_val)), actual_samples)
-        preds = self.model.predict(self.X_val[idxs])
+        recons = self.model.predict(self.X_val[idxs])
 
         for i in range(actual_samples):
             original = self.X_val[idxs[i]][..., 0]
-            reconstructed = preds[i][..., 0]
+            reconstructed = recons[i][..., 0]
             diff = np.abs(original - reconstructed)
 
             original = normalize_for_display(original)
@@ -171,12 +232,19 @@ class SARAutoencoderTrainer:
             raise ValueError(f"{set_name.capitalize()} data is not available.")
 
         print(f"📊 Evaluating {set_name} set reconstructions...")
-        preds = self.model.predict(dataset)
+        reconstructions = self.model.predict(dataset)
+
         stats = []
 
         for idx in range(len(dataset)):
             original = dataset[idx]
-            recon = preds[idx]
+            recon = reconstructions[idx]
+
+            # Compute the binary crossentropy (same as training loss)
+            bce = tf.keras.losses.binary_crossentropy(
+                tf.convert_to_tensor(original.flatten()),
+                tf.convert_to_tensor(recon.flatten())
+            ).numpy().mean()  # Average over all pixels
 
             mse = np.mean((original - recon) ** 2)
             mae = np.mean(np.abs(original - recon))
@@ -187,6 +255,7 @@ class SARAutoencoderTrainer:
 
             stats.append({
                 "index": idx,
+                "reconstruction_loss": bce,  # BCE, matches training loss
                 "mse_loss": mse,
                 "mae_loss": mae,
                 "max_diff": max_diff,
@@ -210,12 +279,11 @@ class SARAutoencoderTrainer:
 
 
 def main():
-    trainer = SARAutoencoderTrainer(patch_dir="/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches/test")
+    trainer = SARVarAutoencoderTrainer(patch_dir="/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches/test")
     trainer.load_data()
-    trainer.build_model()
-    trainer.train(epochs=50)
+    trainer.build_model(n_layers=3)
+    trainer.train(epochs=10)
     trainer.save_model()
-    trainer.show_reconstruction()
     trainer.show_reconstruction()
     eval_df = trainer.evaluate_set()
     print(eval_df.head())
