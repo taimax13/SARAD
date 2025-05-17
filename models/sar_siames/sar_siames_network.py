@@ -8,6 +8,9 @@ import tensorflow as tf
 from tensorflow.keras import layers, models, losses, optimizers
 from models.sar_siames.SARPatchPairsDataset import SARPatchPairsDataset
 
+def l2_norm(t):
+    return tf.math.l2_normalize(t, axis=1)
+
 def build_base_cnn(input_shape=(128, 128, 2), embedding_dim=64):
     """
     Simple CNN to embed SAR patches into a vector.
@@ -25,7 +28,7 @@ def build_base_cnn(input_shape=(128, 128, 2), embedding_dim=64):
 
     x = layers.Dense(embedding_dim)(x)  # embeddings without activation
     # Normalize embeddings to unit vectors
-    outputs = layers.Lambda(lambda t: tf.math.l2_normalize(t, axis=1))(x)
+    outputs = layers.Lambda(l2_norm, output_shape=(embedding_dim,))(x)
 
     model = models.Model(inputs, outputs, name="base_cnn")
     return model
@@ -50,7 +53,9 @@ def build_siamese_network(input_shape=(128, 128, 2), embedding_dim=64):
     embed_a = base_cnn(input_a)
     embed_b = base_cnn(input_b)
 
-    distance = layers.Lambda(euclidean_distance, name="distance")([embed_a, embed_b])
+    distance = layers.Lambda(euclidean_distance, name="distance",
+                         output_shape=(1,))([embed_a, embed_b])
+
 
     model = models.Model(inputs=[input_a, input_b], outputs=distance, name="siamese_network")
     return model
@@ -126,7 +131,12 @@ if __name__ == "__main__":
 
     model.compile(optimizer=optimizers.Adam(1e-3), loss=ContrastiveLoss(margin=1.0))
     model.fit(train_dataset_for_fit, epochs=20, validation_data=val_dataset_for_fit)
-
+    
     if args.save_model_path:
-        logging.info(f"Saving model to: {args.save_model_path}")
+        logging.info(f"Saving Siamese model to: {args.save_model_path}")
         model.save(args.save_model_path)
+
+        # Save the base CNN separately for embedding generation
+        base_cnn = model.get_layer("base_cnn")
+        base_cnn.save(args.save_model_path.replace(".keras", "_base.keras"))
+        logging.info(f"Saved base CNN to: {args.save_model_path.replace('.keras', '_base.keras')}")
