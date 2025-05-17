@@ -1,5 +1,6 @@
 import os
 import random
+import argparse
 import numpy as np
 import tensorflow as tf
 from pathlib import Path
@@ -152,8 +153,6 @@ def normalize_sar(img, min_db=-30, max_db=0):
     return (img - min_db) / (max_db - min_db)
 
 
-import argparse
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_folder", required=True)
@@ -161,16 +160,21 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=8)
     args = parser.parse_args()
 
+    # Load train dataset
     dataset = SARPatchPairsDataset(
         dataset_folder=args.dataset_folder,
         transform=None,
         num_pairs=args.num_pairs,
         batch_size=args.batch_size
     )
+    print(f"Total dataset size: {len(dataset.pairs)} pairs, ~{len(dataset.pairs) // args.batch_size} batches")
 
-    tf_dataset = dataset.get_dataset()
+    full_dataset = dataset.get_dataset(shuffle=True, cache=False)
+    num_batches = len(dataset.pairs) // args.batch_size
+    val_dataset = full_dataset.take(num_batches // 5)  # 20% validation
+    train_dataset = full_dataset.skip(num_batches // 5)
 
-    for patches1, patches2, labels, p1_names, p2_names in tf_dataset.take(1):
-        print(f"Batch shapes: {patches1.shape}, {patches2.shape}")
+    # iterate over a batch
+    for p1, p2, labels, p1_names, p2_names in train_dataset.take(1):
+        print(f"Train batch - Patch 1 shape: {p1.shape}, Patch 2 shape: {p2.shape}")
         print(f"Labels: {labels.numpy()}")
-        print(f"Sample filenames: {p1_names[0].numpy()}, {p2_names[0].numpy()}")
