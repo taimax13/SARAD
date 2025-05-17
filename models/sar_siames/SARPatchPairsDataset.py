@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 from pathlib import Path
 
+
 class SARPatchPairsDataset:
     """
     TensorFlow Dataset for loading paired SAR image patches for contrastive learning.
@@ -90,7 +91,6 @@ class SARPatchPairsDataset:
         patch_path = str(self.dataset_folder / patch_name)
         patch = np.load(patch_path)
         return patch
-
     
     def _parse_pair(self, p1_name, p2_name, label):
         """Load and process a pair of patches."""
@@ -100,7 +100,6 @@ class SARPatchPairsDataset:
         label = np.float32(label)
 
         return patch1, patch2, label, p1_name, p2_name
-
     
     def _create_tf_dataset(self):
         """Create a TensorFlow Dataset from the pairs."""

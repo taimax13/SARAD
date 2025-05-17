@@ -8,6 +8,7 @@ import tensorflow as tf
 from tensorflow.keras import layers, models, losses, optimizers
 from models.sar_siames.SARPatchPairsDataset import SARPatchPairsDataset
 
+
 def l2_norm(t):
     return tf.math.l2_normalize(t, axis=1)
 
@@ -59,6 +60,7 @@ def build_siamese_network(input_shape=(128, 128, 2), embedding_dim=64):
 
     model = models.Model(inputs=[input_a, input_b], outputs=distance, name="siamese_network")
     return model
+
 
 class ContrastiveLoss(losses.Loss):
     """

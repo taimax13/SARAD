@@ -41,11 +41,8 @@ def evaluate_patches(patch_folder, model_path, db_path, k=5):
         # Score is how many neighbors are labeled as anomaly (1) divided by k
         anomaly_score = np.sum(nearest_labels) / k
         predicted_label = int(anomaly_score >= 0.5)  # or keep as soft score if needed
-
         predictions.append((os.path.basename(path), predicted_label, float(anomaly_score)))
-
         logging.debug(f"{os.path.basename(path)} → Label: {predicted_label}, Score: {anomaly_score:.2f}")
-
 
     return predictions
 
