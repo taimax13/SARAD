@@ -34,7 +34,7 @@ class SARPatchPairsDataset:
             p2_name (string): Filename of the second patch.
     """
     
-    def __init__(self, dataset_folder, transform=None, num_pairs=100, batch_size=32):
+    def __init__(self, dataset_folder, transform=None, num_pairs=100, batch_size=32, pair_weight=0.5):
         self.dataset_folder = Path(dataset_folder)
         self.transform = transform
         self.pairs = []
@@ -54,17 +54,17 @@ class SARPatchPairsDataset:
             self.normal_by_imgidx.setdefault(img_idx, []).append(f)
         
         # Build pairs
-        self._build_pairs(num_pairs)
+        self._build_pairs(num_pairs, pair_weight)
         
         # Create TensorFlow dataset
         self.dataset = self._create_tf_dataset()
     
-    def _build_pairs(self, num_pairs):
+    def _build_pairs(self, num_pairs, pair_weight=0.5):
         """Build the pairs of patches for contrastive learning."""
         print(f"🔄 Building {num_pairs} patch pairs for contrastive learning...")
         
         for _ in range(num_pairs):
-            if random.random() < 0.5:  # Positive pair (normal-normal, same image)
+            if random.random() < pair_weight:  # Positive pair (normal-normal, same image)
                 img_idx = random.choice(list(self.normal_by_imgidx.keys()))
                 patches = self.normal_by_imgidx[img_idx]
                 if len(patches) < 2:
@@ -157,6 +157,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_folder", required=True)
     parser.add_argument("--num_pairs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--pair_weight", type=float, default=0.5)
     args = parser.parse_args()
 
     # Load train dataset
@@ -164,7 +165,8 @@ if __name__ == "__main__":
         dataset_folder=args.dataset_folder,
         transform=None,
         num_pairs=args.num_pairs,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
+        pair_weight=args.pair_weight
     )
     print(f"Total dataset size: {len(dataset.pairs)} pairs, ~{len(dataset.pairs) // args.batch_size} batches")
 
