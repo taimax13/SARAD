@@ -28,7 +28,7 @@ elementpath==4.8.0
 exceptiongroup==1.2.2
 executing==2.2.0
 flatbuffers==25.2.10
-flox==0.9.10
+flox<=0.7.2
 folium==0.19.5
 fonttools==4.57.0
 fsspec==2025.3.2
