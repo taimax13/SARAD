@@ -6,7 +6,7 @@ with open("requirements.txt") as f:
 
 setup(
     name='SARAD',
-    version='0.1.0',
+    version='0.2.0',
     description='Synthetic Aperture Radar Anomaly Detection',
     author='Talex Maxim',
     author_email='talex@example.com',
