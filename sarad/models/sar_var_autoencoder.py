@@ -280,8 +280,8 @@ def main():
     trainer.train(epochs=10)
     trainer.save_model()
     trainer.show_reconstruction()
-    eval_df = trainer.evaluate_set()
-    print(eval_df.head())
+    #eval_df = trainer.evaluate_set()
+    #print(eval_df.head())
 
 
 if __name__ == "__main__":

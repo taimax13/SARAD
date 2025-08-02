@@ -3,4 +3,5 @@ class CreateAnomalies:
         pass
 
 
-    def
+    def addInversion(self):
+        pass

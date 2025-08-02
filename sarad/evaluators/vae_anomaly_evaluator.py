@@ -203,7 +203,7 @@ class VAEAnomalyEvaluator:
 
 
 def main():
-    threshold = 0.10
+    threshold = 0.01
     evaluator = VAEAnomalyEvaluator(
         vae_model_path="/home/talexm/models/vae_model.keras", threshold=threshold
     )
