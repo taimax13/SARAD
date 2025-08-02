@@ -8,6 +8,11 @@ __pycache__/
 sarad/data_collector/data/*
 sarad/data_collector/data/
 
+sarad/patcher/data
+sarad/patcher/data/*
+
+sarad/evaluators/output
+sarad/evaluators/output/*
 # Distribution / packaging
 .Python
 build/

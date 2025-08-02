@@ -113,7 +113,7 @@ class SARPatcher:
 
 def main():
     patcher = SARPatcher(
-        input_path="/sarad/data_collector/data/collected_sar_array.npy",
+        input_path="/home/talexm/SARAD/sarad/data_collector/data/collected_sar_array.npy",
         output_dir="data/patches/test",
         patch_size=128,
         stride=128
