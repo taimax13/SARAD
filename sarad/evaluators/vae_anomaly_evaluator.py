@@ -203,22 +203,22 @@ class VAEAnomalyEvaluator:
 
 
 def main():
-    threshold = 0.005
+    threshold = 0.10
     evaluator = VAEAnomalyEvaluator(
-        vae_model_path="~/models/vae_model.keras", threshold=threshold
+        vae_model_path="/home/talexm/models/vae_model.keras", threshold=threshold
     )
 
     # 1️⃣ Create synthetic anomaly set (test2)
     evaluator.create_synthetic_anomaly_set(
-        source_folder="/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches/test",
-        dest_folder="/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches/test2"
+        source_folder="/home/talexm/SARAD/sarad/patcher/data/patches/test",
+        dest_folder="/home/talexm/SARAD/sarad/patcher/data/patches/test2"
     )
-    # ### val corrupt
-    # anomaly_folder = Path("/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches/test2")
-    # anomaly_files = sorted(anomaly_folder.glob("*_A.npy"))
-    #
-    # print(f"📦 Found {len(anomaly_files)} anomaly patches.")
-    #
+    ### val corrupt
+    anomaly_folder = Path("/home/talexm/SARAD/sarad/patcher/data/patches/test2")
+    anomaly_files = sorted(anomaly_folder.glob("*_A.npy"))
+
+    print(f"📦 Found {len(anomaly_files)} anomaly patches.")
+
     # for i, patch_file in enumerate(anomaly_files):
     #     patch = np.load(patch_file)
     #
@@ -236,13 +236,13 @@ def main():
     #     plt.show()
 
     # 2️⃣ Load train_metrics to get mean_loss and std_loss
-    train_metrics = pd.read_csv("/Users/talexm/PyProcessing/AnomalyDetector /SARAD/models/output/train_metrics_new.csv")
+    train_metrics = pd.read_csv("/home/talexm/SARAD/sarad/models/output/train_metrics_new.csv")
     mean_loss = train_metrics["reconstruction_loss"].mean()
     std_loss = train_metrics["reconstruction_loss"].std()
 
     # 3️⃣ Evaluate the whole test2 set
     test_patches = []
-    for patch_file in sorted(Path("/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches/test2").glob("*.npy")):
+    for patch_file in sorted(Path("/home/talexm/SARAD/sarad/patcher/data/patches/test2").glob("*.npy")):
         img = np.load(patch_file)
         bce, p_value = evaluator.score_new_image(img, mean_loss, std_loss)
         test_patches.append({
@@ -253,9 +253,24 @@ def main():
         })
 
     df = pd.DataFrame(test_patches)
-    df.to_csv("models/output/test2_eval.csv", index=False)
+    df.to_csv("./output/test2_eval.csv", index=False)
     df["true_anomaly"] = df["file"].str.contains("_A")
     df["predicted_anomaly"] = df["p_value"] < threshold
+
+    # 📊 Plot P-value distributions for normal vs anomaly
+    plt.figure(figsize=(10, 6))
+    sns.histplot(df[df["true_anomaly"] == False]["p_value"], bins=50, color="green", label="Normal", kde=True,
+                 stat="density")
+    sns.histplot(df[df["true_anomaly"] == True]["p_value"], bins=50, color="red", label="Anomalies", kde=True,
+                 stat="density")
+    plt.axvline(threshold, color="black", linestyle="--", label=f"Threshold = {threshold:.3f}")
+    plt.title("P-value Distribution — Normal vs Anomalous")
+    plt.xlabel("P-value")
+    plt.ylabel("Density")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
     # ✅ Show anomalies found
     anomalies = df[df["p_value"] < threshold]
@@ -266,12 +281,14 @@ def main():
 
     # Plot the first 3 anomalies
     for file in anomalies["file"][:3]:
-        img = np.load("/Users/talexm/PyProcessing/AnomalyDetector /SARAD/patcher/data/patches/test2/" + file)
+        #img = np.load("/home/talexm/SARAD/sarad/patcher/data/patches/test2/" + file)
+        img = np.load(str(Path("/home/talexm/SARAD/sarad/patcher/data/patches/test2") / file))
+
         evaluator.plot_anomaly(img, mean_loss, std_loss)
 
     # Load the CSVs
     train_df = pd.read_csv(os.path.join(get_project_root(), "models","output","train_metrics_new.csv"))
-    test_df = pd.read_csv(os.path.join(get_project_root(), "evaluators/models/output/test2_eval.csv"))
+    test_df = pd.read_csv(os.path.join(get_project_root(), "evaluators/output/test2_eval.csv"))
 
     # Add dataset label
     train_df["dataset"] = "train"
@@ -289,6 +306,8 @@ def main():
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+
 
 
 if __name__ == "__main__":
