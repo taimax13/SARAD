@@ -1,6 +1,6 @@
 import random
 
-class AnomalyCreataor:
+class AnomalyCreator:
 
     def __init__(self):
         pass
