@@ -113,3 +113,34 @@ class Utils:
         print(f"✅ {set_name.capitalize()} set metrics with predictions saved to {save_path}")
 
         return df
+
+    def prepareLables(self, input_npy, most_common_shape,df,patches):
+        valid_items = [item for item in input_npy if item['image'].shape == most_common_shape]
+        rx_labels = dict(zip(df["Patch"], df["is_anomaly"]))
+
+        for patch in patches:
+            patch["image"] = patch["image"].astype("float32") / 255.0
+
+        # Separate normal and anomaly data
+        normal_data = [item for item in patches if "_A" not in item["patch_id"]]
+        anomaly_data = [item for item in patches if "_A" in item["patch_id"]]
+
+        # Combine all patch_ids to encode consistently
+        all_patch_ids = [item["patch_id"] for item in normal_data + anomaly_data]
+
+        # Fit label encoder on all patch IDs
+        patch_id_encoder = LabelEncoder()
+        patch_id_encoded = patch_id_encoder.fit_transform(all_patch_ids)
+
+        # Split encoded patch_ids back
+        normal_patch_ids_encoded = patch_id_encoded[:len(normal_data)]
+        anomaly_patch_ids_encoded = patch_id_encoded[len(normal_data):]
+
+        # Prepare image data and labels
+        normal_patches = np.stack([item['image'] for item in normal_data])
+        normal_labels = np.zeros(len(normal_patches))  # label = 0
+
+        anomaly_patches = np.stack([item['image'] for item in anomaly_data])
+        anomaly_labels = np.ones(len(anomaly_patches))
+
+        return normal_patch_ids_encoded, normal_patches, normal_labels, anomaly_patch_ids_encoded, anomaly_patches, anomaly_labels
