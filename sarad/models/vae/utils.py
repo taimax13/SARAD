@@ -65,6 +65,7 @@ class Utils:
         stats = []
 
         for idx in range(len(dataset)):
+            print(f"enaluating:{idx}, data_set_len:{len(dataset)}")
             original = dataset[idx]
             recon = reconstructions[idx]
             meta = patches[idx]
