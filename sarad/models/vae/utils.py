@@ -55,10 +55,6 @@ class Utils:
     reconstructions = []
 
     def evaluate_set(self, dataset=None, set_name="validation", valid_items=None, threshold=None, model=None, patches = None):
-        global reconstructions
-        # if dataset is None:
-        #     dataset = X_val
-        #     set_name = "validation"
 
         if valid_items is None:
             raise ValueError("⚠️ Must provide `valid_items` to match patch metadata.")
@@ -115,7 +111,7 @@ class Utils:
         df.to_csv(save_path, index=False)
         print(f"✅ {set_name.capitalize()} set metrics with predictions saved to {save_path}")
 
-        return df
+        return df, reconstructions
 
     def prepareDataModel(self, input_npy, most_common_shape,df,patches):
         valid_items = [item for item in input_npy if item['image'].shape == most_common_shape]
