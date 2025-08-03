@@ -245,3 +245,29 @@ class Utils:
             fig.suptitle(f"Patch ID: {patch_id} | True Label: {row['true_label']}", fontsize=12)
             plt.tight_layout()
             plt.show()
+
+    def show_patch(self, idx, X_val, reconstructions, recon_errors, y_val, y_pred):
+        original = X_val[idx]
+        recon = reconstructions[idx]
+        diff = np.abs(original - recon)
+        error_score = recon_errors[idx]
+        true_label = y_val[idx]
+        predicted_label = y_pred[idx]
+
+        fig, axs = plt.subplots(1, 3, figsize=(15, 4))
+
+        axs[0].imshow(original)
+        axs[0].set_title(f"🟢 Original\nLabel: {true_label}")
+        axs[0].axis('off')
+
+        axs[1].imshow(recon)
+        axs[1].set_title(f"🔁 Reconstructed\nError: {error_score:.4f}")
+        axs[1].axis('off')
+
+        axs[2].imshow(diff, cmap='hot')
+        axs[2].set_title(f"🔥 Error Map\nPred: {predicted_label}")
+        axs[2].axis('off')
+
+        plt.suptitle(f"Patch {idx} — {'Anomaly' if predicted_label else 'Normal'}", fontsize=14)
+        plt.tight_layout()
+        plt.show()
