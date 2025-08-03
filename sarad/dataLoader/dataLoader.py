@@ -7,7 +7,7 @@ class DataLoader:
     def __init__(self):
         pass
 
-    def load_data_s2(base_dir = '/kaggle/input/sentinel12-image-pairs-segregated-by-terrain/v_2/'):
+    def load_data_s2(self, base_dir = '/kaggle/input/sentinel12-image-pairs-segregated-by-terrain/v_2/'):
         image_data = []
 
         for root, dirs, files in os.walk(base_dir):
