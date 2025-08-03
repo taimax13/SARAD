@@ -69,6 +69,32 @@ class RXDetector:
         else:
             raise ValueError(f"Unsupported format '{fmt}'.")
 
+    def show_patches(row, rx_map, patches):
+        patch_id = row['Patch']
+        patch_idx = int(patch_id.split("_")[1])  # Extract number from "patch_XX"
+
+        # Load original SAR patch (VV + VH)
+        original_patch = patches[patch_idx]["image"]  # shape: (H, W, 2)
+
+        # Display side by side
+        fig, axs = plt.subplots(1, 3, figsize=(16, 6))
+
+        axs[0].imshow(original_patch[..., 0], cmap='gray')
+        axs[0].set_title(f"{patch_id} - VV Band")
+        axs[0].axis('off')
+
+        axs[1].imshow(original_patch[..., 1], cmap='gray')
+        axs[1].set_title(f"{patch_id} - VH Band")
+        axs[1].axis('off')
+
+        axs[2].imshow(rx_map, cmap='hot')
+        axs[2].set_title(f"RX Score: {row['Max_RX_Score']:.4f}")
+        axs[2].axis('off')
+
+        plt.suptitle(f"Patch: {patch_id}", fontsize=14)
+        plt.tight_layout()
+        plt.show()
+
 
 def main2():
     input_npy = "/home/talexm/SARAD/sarad/data_collector/data/collected_sar_array.npy"
