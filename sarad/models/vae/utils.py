@@ -251,7 +251,6 @@ class Utils:
         error_score = recon_errors[idx]
         true_label = y_val[idx]
         predicted_label = y_pred[idx]
-
         fig, axs = plt.subplots(1, 3, figsize=(15, 4))
 
         axs[0].imshow(original)
