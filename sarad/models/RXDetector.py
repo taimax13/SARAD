@@ -69,7 +69,7 @@ class RXDetector:
         else:
             raise ValueError(f"Unsupported format '{fmt}'.")
 
-    def show_patches(row, rx_map, patches):
+    def show_patches(self,row, rx_map, patches):
         patch_id = row['Patch']
         patch_idx = int(patch_id.split("_")[1])  # Extract number from "patch_XX"
 

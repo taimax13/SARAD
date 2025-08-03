@@ -23,7 +23,9 @@ from tensorflow.keras.saving import register_keras_serializable
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, UpSampling2D, Dense, Flatten, Dropout, Input, Reshape, Conv2DTranspose, Layer
 import tensorflow as tf
 from sklearn.preprocessing import LabelEncoder
-
+from sklearn.metrics.pairwise import cosine_distances
+import matplotlib.pyplot as plt
+import numpy as np
 
 class Sampling(Layer):
     """Sampling layer using (mean, log_var)"""
@@ -147,3 +149,99 @@ class Utils:
 
 
         return normal_patches, normal_labels, anomaly_patches, anomaly_labels
+
+    def mark_anomalous_reconstructions(self,reconstructions, X_val, df_stat, top_k=5, method="cosine"):
+        """
+        Marks samples whose reconstructions deviate the most from the population of reconstructions.
+
+        Args:
+            reconstructions (np.ndarray): Reconstructed images from the model
+            X_val (np.ndarray): Original validation images (for display only)
+            df_stat (pd.DataFrame): Metrics DataFrame to append anomaly info to
+            top_k (int): How many top anomalies to flag
+            method (str): Distance method to use ("cosine" or "euclidean")
+
+        Returns:
+            df_stat: Updated with 'recon_anomaly_score' and 'recon_anomaly_flag'
+        """
+        # Flatten reconstructions
+        recon_vectors = reconstructions.reshape(reconstructions.shape[0], -1)
+
+        # Compute pairwise distance matrix
+        if method == "cosine":
+            dist_matrix = cosine_distances(recon_vectors)
+        elif method == "euclidean":
+            from sklearn.metrics import pairwise_distances
+            dist_matrix = pairwise_distances(recon_vectors, metric="euclidean")
+        else:
+            raise ValueError("Unsupported distance method. Use 'cosine' or 'euclidean'.")
+
+        # Sum of distances from all others = anomaly score
+        anomaly_scores = dist_matrix.sum(axis=1)
+        df_stat["recon_anomaly_score"] = anomaly_scores
+
+        # Flag top_k anomalies
+        threshold_idx = np.argsort(anomaly_scores)[-top_k:]
+        df_stat["recon_anomaly_flag"] = 0
+        df_stat.loc[threshold_idx, "recon_anomaly_flag"] = 1
+
+        print(f"📌 Marked top {top_k} samples with highest reconstruction deviation as anomalies.")
+
+        # Optional: Plot those
+        for idx in threshold_idx:
+            original = X_val[idx]
+            recon = reconstructions[idx]
+            diff = np.abs(original - recon)
+
+            plt.figure(figsize=(8, 3))
+            plt.subplot(1, 3, 1)
+            plt.imshow(original)
+            plt.title("Original")
+
+            plt.subplot(1, 3, 2)
+            plt.imshow(recon)
+            plt.title("Reconstruction")
+
+            plt.subplot(1, 3, 3)
+            plt.imshow(diff, cmap="hot")
+            plt.title(f"Error Map\nReconstruction Score: {anomaly_scores[idx]:.4f}")
+            plt.suptitle(f"Patch ID: {df_stat.iloc[idx]['patch_id']}", fontsize=10)
+            plt.tight_layout()
+            plt.show()
+
+        return df_stat
+
+    def visualize_top_anomalies(self,df_stat, dataset, reconstructions, top_n=5, cmap="hot"):
+        """
+        Visualize original, reconstruction, and error map for top N anomalous patches.
+
+        Args:
+            df_stat (pd.DataFrame): DataFrame with reconstruction_loss, patch_id, etc.
+            dataset (np.ndarray): Original input images
+            reconstructions (np.ndarray): Model reconstructions
+            top_n (int): Number of samples to visualize
+            cmap (str): Colormap for error map
+        """
+        # Sort by highest reconstruction loss
+        df_top = df_stat.sort_values(by="reconstruction_loss", ascending=False).head(top_n)
+
+        for _, row in df_top.iterrows():
+            patch_id = row["patch_id"]
+            idx = int(patch_id.split("_")[-1])  # Assumes "val_123" format
+
+            original = dataset[idx]
+            recon = reconstructions[idx]
+            error_map = np.abs(original - recon)
+
+            fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+            axs[0].imshow(original)
+            axs[0].set_title("Original")
+
+            axs[1].imshow(recon)
+            axs[1].set_title("Reconstruction")
+
+            axs[2].imshow(error_map, cmap=cmap)
+            axs[2].set_title(f"Error Map\nLoss: {row['reconstruction_loss']:.4f}")
+            fig.suptitle(f"Patch ID: {patch_id} | True Label: {row['true_label']}", fontsize=12)
+            plt.tight_layout()
+            plt.show()
