@@ -55,10 +55,6 @@ class Utils:
     reconstructions = []
 
     def evaluate_set(self, dataset=None, set_name="validation", valid_items=None, threshold=None, model=None, patches = None):
-        global reconstructions
-        # if dataset is None:
-        #     dataset = X_val
-        #     set_name = "validation"
 
         if valid_items is None:
             raise ValueError("⚠️ Must provide `valid_items` to match patch metadata.")
@@ -69,6 +65,7 @@ class Utils:
         stats = []
 
         for idx in range(len(dataset)):
+            print(f"enaluating:{idx}, data_set_len:{len(dataset)}")
             original = dataset[idx]
             recon = reconstructions[idx]
             meta = patches[idx]
@@ -107,6 +104,7 @@ class Utils:
         df = pd.DataFrame(stats)
         print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
         print(df[df["true_label"] == 1][["patch_id", "reconstruction_loss", "mse_loss", "mae_loss"]])
+        print(df[df["true_label"] == 0][["patch_id", "reconstruction_loss", "mse_loss", "mae_loss"]])
         print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
 
         # Save
@@ -115,7 +113,7 @@ class Utils:
         df.to_csv(save_path, index=False)
         print(f"✅ {set_name.capitalize()} set metrics with predictions saved to {save_path}")
 
-        return df
+        return df, reconstructions
 
     def prepareDataModel(self, input_npy, most_common_shape,df,patches):
         valid_items = [item for item in input_npy if item['image'].shape == most_common_shape]
@@ -245,3 +243,28 @@ class Utils:
             fig.suptitle(f"Patch ID: {patch_id} | True Label: {row['true_label']}", fontsize=12)
             plt.tight_layout()
             plt.show()
+
+    def show_patch(self, idx, X_val, reconstructions, recon_errors, y_val, y_pred):
+        original = X_val[idx]
+        recon = reconstructions[idx]
+        diff = np.abs(original - recon)
+        error_score = recon_errors[idx]
+        true_label = y_val[idx]
+        predicted_label = y_pred[idx]
+        fig, axs = plt.subplots(1, 3, figsize=(15, 4))
+
+        axs[0].imshow(original)
+        axs[0].set_title(f"🟢 Original\nLabel: {true_label}")
+        axs[0].axis('off')
+
+        axs[1].imshow(recon)
+        axs[1].set_title(f"🔁 Reconstructed\nError: {error_score:.4f}")
+        axs[1].axis('off')
+
+        axs[2].imshow(diff, cmap='hot')
+        axs[2].set_title(f"🔥 Error Map\nPred: {predicted_label}")
+        axs[2].axis('off')
+
+        plt.suptitle(f"Patch {idx} — {'Anomaly' if predicted_label else 'Normal'}", fontsize=14)
+        plt.tight_layout()
+        plt.show()
