@@ -104,6 +104,7 @@ class Utils:
         df = pd.DataFrame(stats)
         print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
         print(df[df["true_label"] == 1][["patch_id", "reconstruction_loss", "mse_loss", "mae_loss"]])
+        print(df[df["true_label"] == 0][["patch_id", "reconstruction_loss", "mse_loss", "mae_loss"]])
         print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
 
         # Save
