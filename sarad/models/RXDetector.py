@@ -72,7 +72,7 @@ class RXDetector:
 
 
 def main2():
-    input_npy = "/Users/talexm/PyProcessing/AnomalyDetector /SARAD/data_collector/data/collected_sar_array.npy"
+    input_npy = "/home/talexm/SARAD/sarad/data_collector/data/collected_sar_array.npy"
     output_dir = "./output/rx_heatmaps"
     save_format = "npz"
     top_n = 5
