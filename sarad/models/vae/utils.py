@@ -2,6 +2,7 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Input,Conv2D, MaxPooling2D, Conv2DTranspose, Flatten, Dense, Reshape
 import tensorflow.keras.backend as K
 import os.path
+from sklearn.model_selection import train_test_split
 import numpy as np
 from pathlib import Path
 from sklearn.model_selection import train_test_split
@@ -114,7 +115,7 @@ class Utils:
 
         return df
 
-    def prepareLables(self, input_npy, most_common_shape,df,patches):
+    def prepareDataModel(self, input_npy, most_common_shape,df,patches):
         valid_items = [item for item in input_npy if item['image'].shape == most_common_shape]
         rx_labels = dict(zip(df["Patch"], df["is_anomaly"]))
 
@@ -143,4 +144,6 @@ class Utils:
         anomaly_patches = np.stack([item['image'] for item in anomaly_data])
         anomaly_labels = np.ones(len(anomaly_patches))
 
-        return normal_patch_ids_encoded, normal_patches, normal_labels, anomaly_patch_ids_encoded, anomaly_patches, anomaly_labels
+
+
+        return normal_patches, normal_labels, anomaly_patches, anomaly_labels
