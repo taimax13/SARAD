@@ -7,13 +7,12 @@ import matplotlib.pyplot as plt
 
 
 class RXDetector:
-    def __init__(self, input_data: Union[str, Path], output_dir: Union[str, Path]):
-        self.input_data = Path(input_data)
-        self.output_dir = Path(output_dir)
+    def __init__(self, output_dir):
+        self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def to_2d_safe(self, arr: np.ndarray, name: str) -> np.ndarray:
-        print(f"👀 Pre-check {name}: shape={arr.shape}, dtype={arr.dtype}")
+        #print(f"👀 Pre-check {name}: shape={arr.shape}, dtype={arr.dtype}")
 
         if arr.ndim == 0:
             raise ValueError("0D scalar patch.")
@@ -21,8 +20,8 @@ class RXDetector:
             return np.expand_dims(arr, axis=0)
         elif arr.ndim == 2:
             return arr
-        elif arr.ndim == 3 and arr.shape[-1] in [1, 2]:
-            return arr
+        elif arr.ndim == 3:
+            return arr  # Accept multiband (e.g., 2 or 3 channels)
         elif arr.ndim > 3:
             arr = arr.squeeze()
             return self.to_2d_safe(arr, name)
@@ -32,8 +31,8 @@ class RXDetector:
     def compute_rx_map(self, image: np.ndarray) -> np.ndarray:
         if image.ndim == 2:
             reshaped = image.reshape(-1, 1).astype(np.float64)
-        elif image.ndim == 3 and image.shape[-1] == 2:
-            reshaped = image.reshape(-1, 2).astype(np.float64)
+        elif image.ndim == 3 and image.shape[-1] >= 2:
+            reshaped = image.reshape(-1, image.shape[-1]).astype(np.float64)
         else:
             raise ValueError(f"Unsupported image shape: {image.shape}")
 
@@ -70,17 +69,88 @@ class RXDetector:
         else:
             raise ValueError(f"Unsupported format '{fmt}'.")
 
+    def buildScoreMap(self, df, show_plt=False):
+
+        mean_score = df["Max_RX_Score"].mean()
+        std_score = df["Max_RX_Score"].std()
+        threshold = df["Max_RX_Score"].quantile(0.90)
+        # threshold = mean_loss + 2 * std_loss
+
+        print(f"\n📊 RX Anomaly Threshold: mean={mean_score:.4f}, std={std_score:.4f}, threshold={threshold:.4f}")
+
+        df["is_anomaly"] = df["Max_RX_Score"] > threshold
+        top_anomalies = df[df["is_anomaly"]].copy()
+        top_normal = df[df["is_anomaly"] == False].copy()
+
+        print(f"🚨 Found {len(top_anomalies)} statistically significant anomalies (score > mean + 2*std)")
+
+        if show_plt:
+            top_anomalies = top_anomalies.sort_values("Max_RX_Score", ascending=False)
+            self.show_plt(top_anomalies, threshold)
+            top_normal = top_normal.sort_values("Max_RX_Score", ascending=True)
+            self.show_plt(top_normal, threshold)
+
+
+        return dict(zip(df["Patch"], df["Max_RX_Score"]))
+
+    def show_plt(self, top_anomalies, threshold):
+        top_anomalies = top_anomalies.sort_values("Max_RX_Score", ascending=False)
+
+        # Limit number to show
+        top_n = min(5, len(top_anomalies))
+
+        # Visualize
+        plt.figure(figsize=(10, 6))
+        plt.barh(
+            top_anomalies["Patch"].head(top_n),
+            top_anomalies["Max_RX_Score"].head(top_n),
+            color="crimson"
+        )
+        plt.gca().invert_yaxis()  # Highest score on top
+        plt.axvline(threshold, color='blue', linestyle='--', label='Threshold')
+        plt.xlabel("RX Score")
+        plt.title(f"🚨 Top {top_n} Statistically Significant RX Anomalies")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    def show_patches(self,row, rx_map, patches):
+        patch_id = row['Patch']
+        patch_idx = int(patch_id.split("_")[1])  # Extract number from "patch_XX"
+
+        # Load original SAR patch (VV + VH)
+        original_patch = patches[patch_idx]["image"]  # shape: (H, W, 2)
+
+        # Display side by side
+        fig, axs = plt.subplots(1, 3, figsize=(16, 6))
+
+        axs[0].imshow(original_patch[..., 0], cmap='gray')
+        axs[0].set_title(f"{patch_id} - VV Band")
+        axs[0].axis('off')
+
+        axs[1].imshow(original_patch[..., 1], cmap='gray')
+        axs[1].set_title(f"{patch_id} - VH Band")
+        axs[1].axis('off')
+
+        axs[2].imshow(rx_map, cmap='hot')
+        axs[2].set_title(f"RX Score: {row['Max_RX_Score']:.4f}")
+        axs[2].axis('off')
+
+        plt.suptitle(f"Patch: {patch_id}", fontsize=14)
+        plt.tight_layout()
+        plt.show()
+
 
 def main2():
-    input_npy = "/Users/talexm/PyProcessing/AnomalyDetector /SARAD/data_collector/data/collected_sar_array.npy"
-    output_dir = "./output/rx_heatmaps"
+    input_npy = "/home/talexm/SARAD/sarad/data_collector/data/collected_sar_array.npy"
+    output_dir = Path("./output/rx_heatmaps")
     save_format = "npz"
     top_n = 5
 
     patches = np.load(input_npy)
     print(f"🚀 Starting RX anomaly detection on stacked array of shape: {patches.shape}")
 
-    rx = RXDetector(input_data=input_npy, output_dir=output_dir)
+    rx = RXDetector(output_dir=output_dir)
     results = {}
 
     for i, patch in enumerate(patches):
