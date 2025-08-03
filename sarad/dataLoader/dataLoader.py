@@ -7,12 +7,12 @@ class DataLoader:
     def __init__(self):
         pass
 
-    def load_data_s2(self, base_dir = '/kaggle/input/sentinel12-image-pairs-segregated-by-terrain/v_2/'):
+    def load_data_s2(self, base_dir = '/kaggle/input/sentinel12-image-pairs-segregated-by-terrain/v_2/', path_base="s2"):
         image_data = []
 
         for root, dirs, files in os.walk(base_dir):
             # Only include files if their immediate directory is named 's2'
-            if os.path.basename(root).lower() == "s2":
+            if os.path.basename(root).lower() == path_base:
                 for file in files:
                     if file.lower().endswith('.png'):
                         image_path = os.path.join(root, file)
