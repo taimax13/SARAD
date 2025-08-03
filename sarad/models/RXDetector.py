@@ -7,13 +7,12 @@ import matplotlib.pyplot as plt
 
 
 class RXDetector:
-    def __init__(self, input_data: Union[str, Path], output_dir: Union[str, Path]):
-        self.input_data = Path(input_data)
-        self.output_dir = Path(output_dir)
+    def __init__(self, output_dir):
+        self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def to_2d_safe(self, arr: np.ndarray, name: str) -> np.ndarray:
-        print(f"👀 Pre-check {name}: shape={arr.shape}, dtype={arr.dtype}")
+        #print(f"👀 Pre-check {name}: shape={arr.shape}, dtype={arr.dtype}")
 
         if arr.ndim == 0:
             raise ValueError("0D scalar patch.")
@@ -21,8 +20,8 @@ class RXDetector:
             return np.expand_dims(arr, axis=0)
         elif arr.ndim == 2:
             return arr
-        elif arr.ndim == 3 and arr.shape[-1] in [1, 2]:
-            return arr
+        elif arr.ndim == 3:
+            return arr  # Accept multiband (e.g., 2 or 3 channels)
         elif arr.ndim > 3:
             arr = arr.squeeze()
             return self.to_2d_safe(arr, name)
@@ -32,8 +31,8 @@ class RXDetector:
     def compute_rx_map(self, image: np.ndarray) -> np.ndarray:
         if image.ndim == 2:
             reshaped = image.reshape(-1, 1).astype(np.float64)
-        elif image.ndim == 3 and image.shape[-1] == 2:
-            reshaped = image.reshape(-1, 2).astype(np.float64)
+        elif image.ndim == 3 and image.shape[-1] >= 2:
+            reshaped = image.reshape(-1, image.shape[-1]).astype(np.float64)
         else:
             raise ValueError(f"Unsupported image shape: {image.shape}")
 
@@ -73,14 +72,14 @@ class RXDetector:
 
 def main2():
     input_npy = "/home/talexm/SARAD/sarad/data_collector/data/collected_sar_array.npy"
-    output_dir = "./output/rx_heatmaps"
+    output_dir = Path("./output/rx_heatmaps")
     save_format = "npz"
     top_n = 5
 
     patches = np.load(input_npy)
     print(f"🚀 Starting RX anomaly detection on stacked array of shape: {patches.shape}")
 
-    rx = RXDetector(input_data=input_npy, output_dir=output_dir)
+    rx = RXDetector(output_dir=output_dir)
     results = {}
 
     for i, patch in enumerate(patches):
