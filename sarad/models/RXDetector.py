@@ -69,6 +69,24 @@ class RXDetector:
         else:
             raise ValueError(f"Unsupported format '{fmt}'.")
 
+    def buildScoreMap(self, df):
+
+        mean_score = df["Max_RX_Score"].mean()
+        std_score = df["Max_RX_Score"].std()
+        threshold = df["Max_RX_Score"].quantile(0.90)
+        # threshold = mean_loss + 2 * std_loss
+
+        print(f"\n📊 RX Anomaly Threshold: mean={mean_score:.4f}, std={std_score:.4f}, threshold={threshold:.4f}")
+
+        df["is_anomaly"] = df["Max_RX_Score"] > threshold
+        top_anomalies = df[df["is_anomaly"]].copy()
+        top_normal = df[df["is_anomaly"] == False].copy()
+
+        print(f"🚨 Found {len(top_anomalies)} statistically significant anomalies (score > mean + 2*std)")
+
+        return dict(zip(df["Patch"], df["Max_RX_Score"]))
+
+
     def show_patches(self,row, rx_map, patches):
         patch_id = row['Patch']
         patch_idx = int(patch_id.split("_")[1])  # Extract number from "patch_XX"
