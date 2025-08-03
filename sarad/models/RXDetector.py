@@ -69,7 +69,7 @@ class RXDetector:
         else:
             raise ValueError(f"Unsupported format '{fmt}'.")
 
-    def buildScoreMap(self, df):
+    def buildScoreMap(self, df, show_plt=False):
 
         mean_score = df["Max_RX_Score"].mean()
         std_score = df["Max_RX_Score"].std()
@@ -84,8 +84,35 @@ class RXDetector:
 
         print(f"🚨 Found {len(top_anomalies)} statistically significant anomalies (score > mean + 2*std)")
 
+        if show_plt:
+            top_anomalies = top_anomalies.sort_values("Max_RX_Score", ascending=False)
+            self.show_plt(top_anomalies, threshold)
+            top_normal = top_normal.sort_values("Max_RX_Score", ascending=True)
+            self.show_plt(top_normal, threshold)
+
+
         return dict(zip(df["Patch"], df["Max_RX_Score"]))
 
+    def show_plt(self, top_anomalies, threshold):
+        top_anomalies = top_anomalies.sort_values("Max_RX_Score", ascending=False)
+
+        # Limit number to show
+        top_n = min(5, len(top_anomalies))
+
+        # Visualize
+        plt.figure(figsize=(10, 6))
+        plt.barh(
+            top_anomalies["Patch"].head(top_n),
+            top_anomalies["Max_RX_Score"].head(top_n),
+            color="crimson"
+        )
+        plt.gca().invert_yaxis()  # Highest score on top
+        plt.axvline(threshold, color='blue', linestyle='--', label='Threshold')
+        plt.xlabel("RX Score")
+        plt.title(f"🚨 Top {top_n} Statistically Significant RX Anomalies")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
 
     def show_patches(self,row, rx_map, patches):
         patch_id = row['Patch']
