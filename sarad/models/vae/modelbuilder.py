@@ -107,10 +107,14 @@ class ModelBuilder:
             x = Conv2DTranspose(filters, (3, 3), strides=2, activation='relu', padding='same')(x)
             filters //= 2
 
-        outputs = Conv2D(input_shape[-1], (3, 3), activation='sigmoid', padding='same')(x)
-
+        #outputs = Conv2D(input_shape[-1], (3, 3), activation='sigmoid', padding='same')(x)
+        # At end of decoder:
+        outputs = Conv2D(input_shape[-1], (3, 3), activation='linear', padding='same')(x)
         model = Model(inputs, outputs)
-        model.compile(optimizer=Adam(1e-4), loss='binary_crossentropy')
+            # In compile:
+        model.compile(optimizer=Adam(1e-4), loss='mse')
+
+        #model.compile(optimizer=Adam(1e-4), loss='binary_crossentropy')
 
         return model
 
