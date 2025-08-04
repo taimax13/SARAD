@@ -38,16 +38,16 @@ class ModelBuilder:
     def __init__(self):
         pass
 
-    def build_model(self, X_train):
+    def build_model(self, X_train, n_layers=7, filters = 64, latent_dim = 64):
         ### build model
         input_shape = X_train.shape[1:]
         inputs = Input(shape=input_shape)
         x = inputs
 
         # ENCODER
-        filters = 64
-        n_layers = 7
-        latent_dim = 64
+        filters = filters
+        n_layers = n_layers
+        latent_dim = latent_dim
 
         for _ in range(n_layers):
             x = Conv2D(filters, (3, 3), activation='relu', padding='same')(x)
@@ -78,10 +78,10 @@ class ModelBuilder:
         return model
 
 
-    def train_model(self, model, X_train, X_val):
+    def train_model(self, model, X_train, X_val, batch_size=8, epochs=35):
         early_stop = EarlyStopping(patience=10, restore_best_weights=True)
-        batch_size = 8
-        epochs = 35
+        batch_size = batch_size
+        epochs = epochs
         return model.fit(
             X_train, X_train,
             validation_data=(X_val, X_val),
