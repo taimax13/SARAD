@@ -82,4 +82,14 @@ class ModelBuilder:
         return model, mean
 
 
-
+    def train_model(self, model, X_train, X_val):
+        early_stop = EarlyStopping(patience=10, restore_best_weights=True)
+        batch_size = 8
+        epochs = 35
+        history = model.fit(
+            X_train, X_train,
+            validation_data=(X_val, X_val),
+            epochs=epochs,
+            batch_size=batch_size,
+            callbacks=[early_stop]
+        )
