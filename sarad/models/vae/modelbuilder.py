@@ -78,7 +78,7 @@ class ModelBuilder:
         outputs = Conv2D(input_shape[-1], (3, 3), activation='sigmoid', padding='same')(x)
 
         model = Model(inputs, outputs)
-        model.compile(optimizer=Adam(1e-4), loss='binary_crossentropy')
+        model.compile(optimizer=Adam(1e-4), loss='mse')
         return model
 
 
