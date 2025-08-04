@@ -22,6 +22,7 @@ from tensorflow.keras.saving import register_keras_serializable
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, UpSampling2D, Dense, Flatten, Dropout, Input, Reshape, Conv2DTranspose, Layer
 import tensorflow as tf
 from sklearn.preprocessing import LabelEncoder
+from tensorflow.keras.layers import BatchNormalization, Dropout, LeakyReLU
 
 class Sampling(Layer):
     """Sampling layer using (mean, log_var)"""
@@ -42,21 +43,23 @@ class ModelBuilder:
         inputs = Input(shape=input_shape)
 
         x = inputs
+        filters = 64
+        n_layers = 5  # 7 is too aggressive unless you're resizing images
 
         # ENCODER
-        filters = 64
-        n_layers = 7
-        latent_dim = 64
-
         for _ in range(n_layers):
-            x = Conv2D(filters, (3, 3), activation='relu', padding='same')(x)
+            x = Conv2D(filters, (3, 3), padding='same')(x)
+            x = BatchNormalization()(x)
+            x = LeakyReLU()(x)
             x = MaxPooling2D((2, 2), padding='same')(x)
-            filters *= 2  # grow deeper layers
+            filters *= 2
 
         shape_before_flattening = K.int_shape(x)[1:]
         x_flat = Flatten()(x)
+        x_flat = Dropout(0.2)(x_flat)
 
         # LATENT SPACE
+        latent_dim = 128  # bump up for multiband detail
         mean = Dense(latent_dim, name="z_mean")(x_flat)
         log_var = Dense(latent_dim, name="z_log_var")(x_flat)
         z = Sampling()([mean, log_var])
@@ -67,14 +70,16 @@ class ModelBuilder:
 
         filters //= 2
         for _ in range(n_layers):
-            x = Conv2DTranspose(filters, (3, 3), strides=2, activation='relu', padding='same')(x)
+            x = Conv2DTranspose(filters, (3, 3), strides=2, padding='same')(x)
+            x = BatchNormalization()(x)
+            x = LeakyReLU()(x)
             filters //= 2
 
         outputs = Conv2D(input_shape[-1], (3, 3), activation='sigmoid', padding='same')(x)
 
         model = Model(inputs, outputs)
         model.compile(optimizer=Adam(1e-4), loss='binary_crossentropy')
-
         return model
+
 
 
