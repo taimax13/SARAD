@@ -79,7 +79,7 @@ class ModelBuilder:
 
         model = Model(inputs, outputs)
         model.compile(optimizer=Adam(1e-4), loss='binary_crossentropy')
-        return model
+        return model, mean
 
 
 
