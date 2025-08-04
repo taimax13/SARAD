@@ -33,7 +33,7 @@ class Sampling(Layer):
         epsilon = tf.random.normal(shape=(batch, dim))
         return mean + tf.exp(0.5 * log_var) * epsilon
 
-class Model:
+class ModelBuilder:
     def __init__(self):
         pass
 
@@ -72,7 +72,7 @@ class Model:
 
         outputs = Conv2D(input_shape[-1], (3, 3), activation='sigmoid', padding='same')(x)
 
-        model = Model(inputs, outputs)
+        model = ModelBuilder(inputs, outputs)
         model.compile(optimizer=Adam(1e-4), loss='binary_crossentropy')
 
         return model
