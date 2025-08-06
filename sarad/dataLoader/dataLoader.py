@@ -11,7 +11,6 @@ class DataLoader:
         image_data = []
 
         for root, dirs, files in os.walk(base_dir):
-            # Only include files if their immediate directory is named 's2'
             if os.path.basename(root).lower() == path_base:
                 for file in files:
                     if file.lower().endswith('.png'):

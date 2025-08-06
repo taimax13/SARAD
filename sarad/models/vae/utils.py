@@ -27,15 +27,7 @@ from sklearn.metrics.pairwise import cosine_distances
 import matplotlib.pyplot as plt
 import numpy as np
 
-class Sampling(Layer):
-    """Sampling layer using (mean, log_var)"""
 
-    def call(self, inputs):
-        mean, log_var = inputs
-        batch = tf.shape(mean)[0]
-        dim = tf.shape(mean)[1]
-        epsilon = tf.random.normal(shape=(batch, dim))
-        return mean + tf.exp(0.5 * log_var) * epsilon
 
 class Utils:
     def __init__(self):
