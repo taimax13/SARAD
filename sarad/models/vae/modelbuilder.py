@@ -66,7 +66,8 @@ class Sampling(Layer):
 
 class ModelBuilder:
     def __init__(self):
-        self.print_layer_activations = PrintLayerActivations()
+        pass
+        #self.print_layer_activations = PrintLayerActivations()
 
     def build_model(self, X_train, n_layers=5, filters = 64, latent_dim = 64):
         ### build model
@@ -157,6 +158,6 @@ class ModelBuilder:
             validation_data=(X_val, X_val),
             epochs=epochs,
             batch_size=batch_size,
-            callbacks=[early_stop, self.print_layer_activations]
+            callbacks=[early_stop]
         )
 
