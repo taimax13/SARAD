@@ -39,3 +39,5 @@ from sarad.pipeline import SARPreprocessor
 
 pre = SARPreprocessor("data/raw", "data/cleaned")
 pre.process_all()
+```
+[![Notebook Log Preview](images/log_preview.png)](https://www.kaggle.com/code/talexmaxim/ansamble-of-anomaly-ima-3bf0fe/log?scriptVersionId=255094833)
