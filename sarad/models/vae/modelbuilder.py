@@ -24,6 +24,36 @@ import tensorflow as tf
 from sklearn.preprocessing import LabelEncoder
 from tensorflow.keras.layers import BatchNormalization, Dropout, LeakyReLU
 
+import keras.backend as K
+import numpy as np
+import matplotlib.pyplot as plt
+from keras.callbacks import Callback
+
+
+# Custom Callback to print layer outputs and visualize activations
+class PrintLayerActivations(Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        print(f"Epoch {epoch + 1}/{self.params['epochs']}:")
+
+        # Loop over layers and print activation statistics
+        for layer in self.model.layers:
+            if isinstance(layer, Conv2D) or isinstance(layer, Conv2DTranspose):
+                # Get the output of the layer (activations)
+                layer_output = K.function([self.model.input], [layer.output])([self.model.input])[0]
+
+                # Print summary or stats (e.g., max, mean) of the activations
+                print(
+                    f"Layer: {layer.name}, Output Shape: {layer_output.shape}, "
+                    f"Max Activation: {np.max(layer_output)}, Mean Activation: {np.mean(layer_output)}"
+                )
+
+                # Visualize the activations (first filter, first image in the batch)
+                plt.imshow(layer_output[0, :, :, 0], cmap='viridis')  # Display first filter's output
+                plt.title(f"Layer: {layer.name} - Activation")
+                plt.colorbar()
+                plt.show()
+
+
 class Sampling(Layer):
     """Sampling layer using (mean, log_var)"""
 
@@ -36,7 +66,7 @@ class Sampling(Layer):
 
 class ModelBuilder:
     def __init__(self):
-        pass
+        self.print_layer_activations = PrintLayerActivations()
 
     def build_model(self, X_train, n_layers=5, filters = 64, latent_dim = 64):
         ### build model
@@ -127,6 +157,6 @@ class ModelBuilder:
             validation_data=(X_val, X_val),
             epochs=epochs,
             batch_size=batch_size,
-            callbacks=[early_stop]
+            callbacks=[early_stop, self.print_layer_activations]
         )
 
