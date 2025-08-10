@@ -56,15 +56,19 @@ class PrintLayerActivations(Callback):
                 plt.show()
 
 
-class Sampling(Layer):
-    """Sampling layer using (mean, log_var)"""
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
 
+class Sampling(layers.Layer):
     def call(self, inputs):
-        mean, log_var = inputs
-        batch = tf.shape(mean)[0]
-        dim = tf.shape(mean)[1]
-        epsilon = tf.random.normal(shape=(batch, dim))
-        return mean + tf.exp(0.5 * log_var) * epsilon
+        z_mean, z_log_var = inputs
+        z_mean = tf.cast(z_mean, tf.float32)
+        z_log_var = tf.cast(z_log_var, tf.float32)
+        eps = tf.random.normal(tf.shape(z_mean), dtype=tf.float32)
+        z = z_mean + tf.exp(0.5 * z_log_var) * eps
+        return tf.cast(z, tf.float16)  # or keep float32
+
 
 class ModelBuilder:
     def __init__(self):
