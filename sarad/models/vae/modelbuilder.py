@@ -23,7 +23,9 @@ from tensorflow.keras.layers import Conv2D, MaxPooling2D, UpSampling2D, Dense, F
 import tensorflow as tf
 from sklearn.preprocessing import LabelEncoder
 from tensorflow.keras.layers import BatchNormalization, Dropout, LeakyReLU
-
+import numpy as np
+from tensorflow import keras
+from tensorflow.keras import layers
 import keras.backend as K
 import numpy as np
 import matplotlib.pyplot as plt
@@ -72,6 +74,9 @@ class ModelBuilder:
     def build_model(self, X_train, n_layers=5, filters = 64, latent_dim = 64):
         ### build model
         input_shape = X_train.shape[1:]
+
+        # ... after your conv stack, you have `x`
+
         inputs = Input(shape=input_shape)
         x = inputs
 
@@ -85,7 +90,8 @@ class ModelBuilder:
             x = MaxPooling2D((2, 2), padding='same')(x)
             filters *= 2  # grow deeper layers
 
-        shape_before_flattening = K.int_shape(x)[1:]
+        #shape_before_flattening = K.int_shape(x)[1:]
+        shape_before_flattening = tuple(x.shape[1:])
         x_flat = Flatten()(x)
 
         # LATENT SPACE
