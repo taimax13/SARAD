@@ -23,24 +23,64 @@ from tensorflow.keras.layers import Conv2D, MaxPooling2D, UpSampling2D, Dense, F
 import tensorflow as tf
 from sklearn.preprocessing import LabelEncoder
 from tensorflow.keras.layers import BatchNormalization, Dropout, LeakyReLU
+import numpy as np
+from tensorflow import keras
+from tensorflow.keras import layers
+import keras.backend as K
+import numpy as np
+import matplotlib.pyplot as plt
+from keras.callbacks import Callback
 
-class Sampling(Layer):
-    """Sampling layer using (mean, log_var)"""
 
+# Custom Callback to print layer outputs and visualize activations
+class PrintLayerActivations(Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        print(f"Epoch {epoch + 1}/{self.params['epochs']}:")
+
+        # Loop over layers and print activation statistics
+        for layer in self.model.layers:
+            if isinstance(layer, Conv2D) or isinstance(layer, Conv2DTranspose):
+                # Get the output of the layer (activations)
+                layer_output = K.function([self.model.input], [layer.output])([self.model.input])[0]
+
+                # Print summary or stats (e.g., max, mean) of the activations
+                print(
+                    f"Layer: {layer.name}, Output Shape: {layer_output.shape}, "
+                    f"Max Activation: {np.max(layer_output)}, Mean Activation: {np.mean(layer_output)}"
+                )
+
+                # Visualize the activations (first filter, first image in the batch)
+                plt.imshow(layer_output[0, :, :, 0], cmap='viridis')  # Display first filter's output
+                plt.title(f"Layer: {layer.name} - Activation")
+                plt.colorbar()
+                plt.show()
+
+
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+
+class Sampling(layers.Layer):
     def call(self, inputs):
-        mean, log_var = inputs
-        batch = tf.shape(mean)[0]
-        dim = tf.shape(mean)[1]
-        epsilon = tf.random.normal(shape=(batch, dim))
-        return mean + tf.exp(0.5 * log_var) * epsilon
+        z_mean, z_log_var = inputs
+        z_mean = tf.cast(z_mean, tf.float32)
+        z_log_var = tf.cast(z_log_var, tf.float32)
+        eps = tf.random.normal(tf.shape(z_mean), dtype=tf.float32)
+        z = z_mean + tf.exp(0.5 * z_log_var) * eps
+        return tf.cast(z, tf.float16)  # or keep float32
+
 
 class ModelBuilder:
     def __init__(self):
         pass
+        #self.print_layer_activations = PrintLayerActivations()
 
     def build_model(self, X_train, n_layers=5, filters = 64, latent_dim = 64):
         ### build model
         input_shape = X_train.shape[1:]
+
+        # ... after your conv stack, you have `x`
+
         inputs = Input(shape=input_shape)
         x = inputs
 
@@ -54,7 +94,8 @@ class ModelBuilder:
             x = MaxPooling2D((2, 2), padding='same')(x)
             filters *= 2  # grow deeper layers
 
-        shape_before_flattening = K.int_shape(x)[1:]
+        #shape_before_flattening = K.int_shape(x)[1:]
+        shape_before_flattening = tuple(x.shape[1:])
         x_flat = Flatten()(x)
 
         # LATENT SPACE

@@ -111,7 +111,6 @@ class SARAutoencoderTrainer:
 def main():
     patch_dir = "path/to/patches"
     model_path = "sarad/models/sar_autoencoder.h5"
-
     trainer = SARAutoencoderTrainer(patch_dir, model_path)
     trainer.load_data()
     trainer.build_model()
